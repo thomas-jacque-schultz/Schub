@@ -4,6 +4,6 @@
     <mapping directory="" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/Back" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/Docker" vcs="Git" />
-    <mapping directory="$PROJECT_DIR$/Front" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/front" vcs="Git" />
   </component>
 </project>

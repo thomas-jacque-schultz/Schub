@@ -2,5 +2,5 @@
 	path = Front
 	url = https://github.com/thomas-jacque-schultz/Front
 [submodule "Docker"]
-    path = Docker
-    url = https://github.com/thomas-jacque-schultz/Docker
+	path = Docker
+	url = https://github.com/thomas-jacque-schultz/Docker

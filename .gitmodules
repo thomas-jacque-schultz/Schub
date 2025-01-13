@@ -1,9 +1,12 @@
 [submodule "Front"]
 	path = Front
 	url = https://github.com/thomas-jacque-schultz/Front
+	branch = main
 [submodule "Docker"]
 	path = Docker
 	url = https://github.com/thomas-jacque-schultz/Docker
+	branch = main
 [submodule "Back"]
 	path = Back
 	url = https://github.com/thomas-jacque-schultz/Back
+	branch = main

@@ -13,3 +13,4 @@
 [submodule "Bot"]
 	path = Bot
 	url = https://github.com/thomas-jacque-schultz/Bot.git
+	branch = main

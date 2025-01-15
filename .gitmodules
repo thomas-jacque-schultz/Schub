@@ -10,3 +10,6 @@
 	path = Back
 	url = https://github.com/thomas-jacque-schultz/Back
 	branch = main
+[submodule "Bot"]
+	path = Bot
+	url = https://github.com/thomas-jacque-schultz/Bot.git

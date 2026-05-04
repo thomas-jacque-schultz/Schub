@@ -1,0 +1,72 @@
+version: '3'
+
+tasks:
+  # ============ DEV ENVIRONMENT ============
+  run:dev:
+    desc: Start all services with docker-compose
+    cmd: docker-compose up -d
+    deps: [build:dev]
+
+  build:dev:
+    desc: Build dev images
+    cmd: docker-compose build
+
+  down:
+    desc: Stop all services
+    cmd: docker-compose down
+
+  logs:
+    desc: View logs from all services
+    cmd: docker-compose logs -f
+
+  # ============ RELEASE TASKS ============
+  
+  release:back:
+    desc: Create release tag for Back service - Usage - task release:back -- v1.0.0
+    requires:
+      vars: [VERSION]
+    cmds:
+      - cd Back && git tag -a {{.VERSION}} -m "🔧 ci: release {{.VERSION}}" && git push origin {{.VERSION}}
+    summary: 'Back service released as {{.VERSION}}'
+
+  release:bot:
+    desc: Create release tag for Bot service - Usage - task release:bot -- v1.0.0
+    requires:
+      vars: [VERSION]
+    cmds:
+      - cd Bot && git tag -a {{.VERSION}} -m "🔧 ci: release {{.VERSION}}" && git push origin {{.VERSION}}
+    summary: 'Bot service released as {{.VERSION}}'
+
+  release:front:
+    desc: Create release tag for Front service - Usage - task release:front -- v1.0.0
+    requires:
+      vars: [VERSION]
+    cmds:
+      - cd Front && git tag -a {{.VERSION}} -m "🔧 ci: release {{.VERSION}}" && git push origin {{.VERSION}}
+    summary: 'Front service released as {{.VERSION}}'
+
+  release:all:
+    desc: Create release tags for all services - Usage - task release:all -- v1.0.0
+    requires:
+      vars: [VERSION]
+    cmds:
+      - task: release:back
+        vars: {VERSION: "{{.VERSION}}"}
+      - task: release:bot
+        vars: {VERSION: "{{.VERSION}}"}
+      - task: release:front
+        vars: {VERSION: "{{.VERSION}}"}
+    summary: 'All services released as {{.VERSION}}'
+
+  tags:list:
+    desc: List all release tags sorted by version
+    cmd: git tag -l --sort=-v:refname | head -20
+
+  tags:delete:
+    desc: Delete a tag (local and remote) - Usage - task tags:delete -- v1.0.0
+    requires:
+      vars: [VERSION]
+    cmds:
+      - git tag -d {{.VERSION}} || true
+      - git push origin --delete {{.VERSION}} || true
+    summary: 'Tag {{.VERSION}} deleted'

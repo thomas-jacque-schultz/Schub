@@ -1,7 +1,7 @@
 version: '3'
 
 tasks:
-  # ============ DEV ENVIRONMENT ============
+  # DEV ENVIRONMENT
   run:dev:
     desc: Start all services with docker-compose
     cmd: docker-compose up -d
@@ -19,36 +19,28 @@ tasks:
     desc: View logs from all services
     cmd: docker-compose logs -f
 
-  # ============ RELEASE TASKS ============
+  # RELEASE TASKS
   
   release:back:
-    desc: Create release tag for Back service - Usage - task release:back -- v1.0.0
-    requires:
-      vars: [VERSION]
-    cmds:
-      - cd Back && git tag -a {{.VERSION}} -m "🔧 ci: release {{.VERSION}}" && git push origin {{.VERSION}}
-    summary: 'Back service released as {{.VERSION}}'
+    desc: Create release tag for Back (usage - task release:back VERSION=v1.0.0)
+    cmd: cd Back && git tag -a {{.VERSION}} -m "ci- release {{.VERSION}}" && git push origin {{.VERSION}}
+    vars:
+      VERSION: ""
 
   release:bot:
-    desc: Create release tag for Bot service - Usage - task release:bot -- v1.0.0
-    requires:
-      vars: [VERSION]
-    cmds:
-      - cd Bot && git tag -a {{.VERSION}} -m "🔧 ci: release {{.VERSION}}" && git push origin {{.VERSION}}
-    summary: 'Bot service released as {{.VERSION}}'
+    desc: Create release tag for Bot (usage - task release:bot VERSION=v1.0.0)
+    cmd: cd Bot && git tag -a {{.VERSION}} -m "ci- release {{.VERSION}}" && git push origin {{.VERSION}}
+    vars:
+      VERSION: ""
 
   release:front:
-    desc: Create release tag for Front service - Usage - task release:front -- v1.0.0
-    requires:
-      vars: [VERSION]
-    cmds:
-      - cd Front && git tag -a {{.VERSION}} -m "🔧 ci: release {{.VERSION}}" && git push origin {{.VERSION}}
-    summary: 'Front service released as {{.VERSION}}'
+    desc: Create release tag for Front (usage - task release:front VERSION=v1.0.0)
+    cmd: cd Front && git tag -a {{.VERSION}} -m "ci- release {{.VERSION}}" && git push origin {{.VERSION}}
+    vars:
+      VERSION: ""
 
   release:all:
-    desc: Create release tags for all services - Usage - task release:all -- v1.0.0
-    requires:
-      vars: [VERSION]
+    desc: Create release tags for all (usage - task release:all VERSION=v1.0.0)
     cmds:
       - task: release:back
         vars: {VERSION: "{{.VERSION}}"}
@@ -56,17 +48,17 @@ tasks:
         vars: {VERSION: "{{.VERSION}}"}
       - task: release:front
         vars: {VERSION: "{{.VERSION}}"}
-    summary: 'All services released as {{.VERSION}}'
+    vars:
+      VERSION: ""
 
   tags:list:
     desc: List all release tags sorted by version
-    cmd: git tag -l --sort=-v:refname | head -20
+    cmd: git tag -l --sort=-v:refname
 
   tags:delete:
-    desc: Delete a tag (local and remote) - Usage - task tags:delete -- v1.0.0
-    requires:
-      vars: [VERSION]
+    desc: Delete a tag (usage - task tags:delete VERSION=v1.0.0)
     cmds:
       - git tag -d {{.VERSION}} || true
       - git push origin --delete {{.VERSION}} || true
-    summary: 'Tag {{.VERSION}} deleted'
+    vars:
+      VERSION: ""

@@ -1,0 +1,120 @@
+name: release
+
+# Release manuelle, déclenchée à la demande.
+# Fait, dans l'ordre :
+#   1. sur chaque sous-repo (BFF/Bot/Front) : fast-forward main <- develop, tag vX.Y.Z, push
+#   2. attend que le build docker (déjà existant dans chaque sous-repo) se termine
+#   3. aligne les gitlinks de ce repo parent sur les commits tagués, tag le parent
+#   4. publie une release GitHub agrégée sur ce repo
+#
+# Nécessite un secret RELEASE_PAT : PAT (fine-grained recommandé) avec accès
+# contents:write sur Schub, schub-back-bff, schub-back-bot-server et
+# schub-front-servers. Le GITHUB_TOKEN par défaut ne peut pas pousser sur
+# un autre repo que celui qui exécute le workflow.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version à releaser, ex: v1.2.3"
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  VERSION: ${{ inputs.version }}
+  GH_TOKEN: ${{ secrets.RELEASE_PAT }}
+  SUBREPOS: schub-back-bff schub-back-bot-server schub-front-servers
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Vérifie le format de version
+        run: |
+          if ! [[ "${VERSION}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Error: version doit être de la forme vX.Y.Z (reçu: ${VERSION})"
+            exit 1
+          fi
+
+      - name: Checkout Schub
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.RELEASE_PAT }}
+          fetch-depth: 0
+
+      - name: Configure git
+        run: |
+          git config user.name "release-bot"
+          git config user.email "release-bot@users.noreply.github.com"
+
+      - name: Release chaque sous-repo (fast-forward main + tag)
+        run: |
+          set -e
+          for repo in ${SUBREPOS}; do
+            echo "== ${repo} =="
+            git clone --quiet "https://x-access-token:${GH_TOKEN}@github.com/thomas-jacque-schultz/${repo}.git" "/tmp/${repo}"
+            cd "/tmp/${repo}"
+
+            git checkout main
+            if ! git merge-base --is-ancestor origin/develop main; then
+              git merge --ff-only origin/develop
+            fi
+            git push origin main
+
+            if git rev-parse "${VERSION}" >/dev/null 2>&1; then
+              echo "Error: le tag ${VERSION} existe déjà sur ${repo}"
+              exit 1
+            fi
+            git tag -a "${VERSION}" -m "release ${VERSION}"
+            git push origin "${VERSION}"
+
+            git rev-parse HEAD > "/tmp/${repo}.sha"
+            cd - >/dev/null
+          done
+
+      - name: Attend le build docker de chaque sous-repo
+        run: |
+          set -e
+          for repo in ${SUBREPOS}; do
+            sha="$(cat "/tmp/${repo}.sha")"
+            echo "== attente du build sur ${repo} (${sha:0:7}) =="
+
+            run_id=""
+            for _ in $(seq 1 30); do
+              run_id=$(gh api "repos/thomas-jacque-schultz/${repo}/actions/runs?head_sha=${sha}" \
+                --jq '.workflow_runs[] | select(.name | test("release")) | .id' | head -1)
+              [ -n "$run_id" ] && break
+              sleep 5
+            done
+
+            if [ -z "$run_id" ]; then
+              echo "Error: aucun run de release trouvé pour ${repo}"
+              exit 1
+            fi
+
+            gh run watch "$run_id" --repo "thomas-jacque-schultz/${repo}" --exit-status
+          done
+
+      - name: Aligne les gitlinks de Schub sur les nouveaux tags
+        run: |
+          set -e
+          for repo in ${SUBREPOS}; do
+            sha="$(cat "/tmp/${repo}.sha")"
+            git update-index --cacheinfo 160000,"${sha}","${repo}"
+          done
+          git commit -m "release: ${VERSION}"
+          git tag -a "${VERSION}" -m "release ${VERSION}"
+          git push origin main "${VERSION}"
+
+      - name: Publie la release GitHub
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PAT }}
+        run: |
+          notes="## ${VERSION}"$'\n\n'
+          for repo in ${SUBREPOS}; do
+            sha="$(cat "/tmp/${repo}.sha")"
+            notes+="- ${repo}: ${sha:0:7}"$'\n'
+          done
+          gh release create "${VERSION}" --title "${VERSION}" --notes "${notes}"

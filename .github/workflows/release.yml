@@ -81,10 +81,14 @@ jobs:
             sha="$(cat "/tmp/${repo}.sha")"
             echo "== attente du build sur ${repo} (${sha:0:7}) =="
 
+            # nommément "release - docker image" : deux workflows se déclenchent sur le
+            # même tag (docker + github release), un filtre large sur "release" attrape
+            # le premier des deux trouvé, qui peut être le mauvais (celui qui ne construit
+            # rien et réussit toujours vite) et donner un faux feu vert.
             run_id=""
             for _ in $(seq 1 30); do
               run_id=$(gh api "repos/thomas-jacque-schultz/${repo}/actions/runs?head_sha=${sha}" \
-                --jq '.workflow_runs[] | select(.name | test("release")) | .id' | head -1)
+                --jq '.workflow_runs[] | select(.name == "release - docker image") | .id' | head -1)
               [ -n "$run_id" ] && break
               sleep 5
             done

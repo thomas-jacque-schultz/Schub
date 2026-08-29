@@ -46,8 +46,8 @@ jobs:
 
       - name: Configure git
         run: |
-          git config user.name "release-bot"
-          git config user.email "release-bot@users.noreply.github.com"
+          git config --global user.name "release-bot"
+          git config --global user.email "release-bot@users.noreply.github.com"
 
       - name: Release chaque sous-repo (fast-forward main + tag)
         run: |

@@ -1,16 +1,12 @@
-[submodule "Front"]
-	path = Front
-	url = https://github.com/thomas-jacque-schultz/Front
+[submodule "schub-front-servers"]
+	path = schub-front-servers
+	url = https://github.com/thomas-jacque-schultz/schub-front-servers
 	branch = main
-[submodule "Docker"]
-	path = Docker
-	url = https://github.com/thomas-jacque-schultz/Docker
+[submodule "schub-back-bff"]
+	path = schub-back-bff
+	url = https://github.com/thomas-jacque-schultz/schub-back-bff
 	branch = main
-[submodule "Back"]
-	path = Back
-	url = https://github.com/thomas-jacque-schultz/Back
-	branch = main
-[submodule "Bot"]
-	path = Bot
-	url = https://github.com/thomas-jacque-schultz/Bot
+[submodule "schub-back-bot-server"]
+	path = schub-back-bot-server
+	url = https://github.com/thomas-jacque-schultz/schub-back-bot-server
 	branch = main

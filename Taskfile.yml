@@ -1,64 +1,31 @@
 version: '3'
 
+vars:
+  SUBREPOS: schub-back-bff schub-back-bot-server schub-front-servers
+
 tasks:
-  # DEV ENVIRONMENT
-  run:dev:
-    desc: Start all services with docker-compose
-    cmd: docker-compose up -d
-    deps: [build:dev]
-
-  build:dev:
-    desc: Build dev images
-    cmd: docker-compose build
-
-  down:
-    desc: Stop all services
-    cmd: docker-compose down
-
-  logs:
-    desc: View logs from all services
-    cmd: docker-compose logs -f
-
-  # RELEASE TASKS
-  
-  release:back:
-    desc: Create release tag for Back (usage - task release:back VERSION=v1.0.0)
-    cmd: cd Back && git tag -a {{.VERSION}} -m "ci- release {{.VERSION}}" && git push origin {{.VERSION}}
-    vars:
-      VERSION: ""
-
-  release:bot:
-    desc: Create release tag for Bot (usage - task release:bot VERSION=v1.0.0)
-    cmd: cd Bot && git tag -a {{.VERSION}} -m "ci- release {{.VERSION}}" && git push origin {{.VERSION}}
-    vars:
-      VERSION: ""
-
-  release:front:
-    desc: Create release tag for Front (usage - task release:front VERSION=v1.0.0)
-    cmd: cd Front && git tag -a {{.VERSION}} -m "ci- release {{.VERSION}}" && git push origin {{.VERSION}}
-    vars:
-      VERSION: ""
-
-  release:all:
-    desc: Create release tags for all (usage - task release:all VERSION=v1.0.0)
+  submodules:status:
+    desc: "État des 3 submodules (branche, avance/retard sur origin, modifs locales)"
     cmds:
-      - task: release:back
-        vars: {VERSION: "{{.VERSION}}"}
-      - task: release:bot
-        vars: {VERSION: "{{.VERSION}}"}
-      - task: release:front
-        vars: {VERSION: "{{.VERSION}}"}
-    vars:
-      VERSION: ""
+      - |
+        for repo in {{.SUBREPOS}}; do
+          echo "== $repo =="
+          git -C "$repo" fetch origin --quiet
+          git -C "$repo" status --short --branch
+        done
+
+  release:cleanup:
+    desc: "Supprime un tag raté sur les 3 sous-repos ET sur Schub. Usage: task release:cleanup VERSION=v1.2.0"
+    requires:
+      vars: [VERSION]
+    cmds:
+      - |
+        for repo in {{.SUBREPOS}} .; do
+          echo "== $repo =="
+          git -C "$repo" push origin --delete {{.VERSION}} 2>&1 || true
+          git -C "$repo" tag -d {{.VERSION}} 2>&1 || true
+        done
 
   tags:list:
-    desc: List all release tags sorted by version
+    desc: "Liste les tags de release de Schub (pas des sous-repos)"
     cmd: git tag -l --sort=-v:refname
-
-  tags:delete:
-    desc: Delete a tag (usage - task tags:delete VERSION=v1.0.0)
-    cmds:
-      - git tag -d {{.VERSION}} || true
-      - git push origin --delete {{.VERSION}} || true
-    vars:
-      VERSION: ""

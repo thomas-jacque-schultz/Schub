@@ -1,7 +1,7 @@
 version: '3'
 
 vars:
-  SUBREPOS: schub-back-bff schub-back-bot-server schub-front-servers
+  SUBREPOS: schub-back-bff schub-connector-discord schub-front-servers schub-connector-freebox schub-connector-portainer schub-connector-riot schub-core
 
 tasks:
   submodules:status:

@@ -6,7 +6,23 @@
 	path = schub-back-bff
 	url = https://github.com/thomas-jacque-schultz/schub-back-bff
 	branch = main
-[submodule "schub-back-bot-server"]
-	path = schub-back-bot-server
-	url = https://github.com/thomas-jacque-schultz/schub-back-bot-server
+[submodule "schub-connector-discord"]
+	path = schub-connector-discord
+	url = https://github.com/thomas-jacque-schultz/schub-connector-discord
+	branch = main
+[submodule "schub-core"]
+	path = schub-core
+	url = git@github.com:thomas-jacque-schultz/schub-core.git
+	branch = main
+[submodule "schub-connector-portainer"]
+	path = schub-connector-portainer
+	url = git@github.com:thomas-jacque-schultz/schub-connector-portainer.git
+	branch = main
+[submodule "schub-connector-freebox"]
+	path = schub-connector-freebox
+	url = git@github.com:thomas-jacque-schultz/schub-connector-freebox.git
+	branch = main
+[submodule "schub-connector-riot"]
+	path = schub-connector-riot
+	url = git@github.com:thomas-jacque-schultz/schub-connector-riot.git
 	branch = main

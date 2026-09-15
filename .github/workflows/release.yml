@@ -8,8 +8,9 @@ name: release
 #   4. publie une release GitHub agrégée sur ce repo
 #
 # Nécessite un secret RELEASE_PAT : PAT (fine-grained recommandé) avec accès
-# contents:write sur Schub, schub-back-bff, schub-back-bot-server et
-# schub-front-servers. Le GITHUB_TOKEN par défaut ne peut pas pousser sur
+# contents:write sur Schub et les sept sous-repos (schub-back-bff,
+# schub-connector-discord, schub-front-servers, schub-core,
+# schub-connector-{portainer,freebox,riot}). Le GITHUB_TOKEN par défaut ne peut pas pousser sur
 # un autre repo que celui qui exécute le workflow.
 
 on:
@@ -25,7 +26,7 @@ permissions:
 env:
   VERSION: ${{ inputs.version }}
   GH_TOKEN: ${{ secrets.RELEASE_PAT }}
-  SUBREPOS: schub-back-bff schub-back-bot-server schub-front-servers
+  SUBREPOS: schub-back-bff schub-connector-discord schub-front-servers schub-connector-freebox schub-connector-portainer schub-connector-riot schub-core
 
 jobs:
   release:

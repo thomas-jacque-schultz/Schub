@@ -239,7 +239,8 @@ Chaque phase est déployable et testable seule.
 - [x] Squelettes des 4 nouveaux repos créés et compilant (13-09)
 - [ ] ~~RabbitMQ~~ — retiré le 13-09, voir §5
 - [~] `contracts/` : remplacer l'AsyncAPI par les OpenAPI des trois connecteurs —
-      `connector-freebox.openapi.yaml` écrit le 15-09, les autres suivront leurs phases
+      `connector-freebox` (15-09) et `connector-portainer` (16-09) écrits ; restent
+      `connector-discord` et `core`, tous deux en phase 3
 
 ### Phase 1 — `schub-connector-freebox` — FAITE le 2026-09-15
 
@@ -257,13 +258,13 @@ vu le comportement réel.
       `RedirectionRequestService` — **le réconciliateur et ses tests n'ont pas bougé** (30 tests, verts après la coupe)
 - [x] Le secret `FREEBOX_APP_TOKEN` suit le service
 
-### Phase 2 — `schub-connector-portainer`
+### Phase 2 — `schub-connector-portainer` — FAITE le 2026-09-16
 
-- [ ] Déplacer `PortainerRequestService`, `PortainerErrorLogger`, `PortainerApiConfiguration`
-- [ ] Boucle de sonde sur `GET /api/stacks`, cache mémoire daté (§6)
-- [ ] API : `GET /stacks`, `GET /stacks/{id}`, `POST /stacks/{id}/start`,
+- [x] Déplacer `PortainerRequestService`, `PortainerErrorLogger`, `PortainerApiConfiguration`
+- [x] Boucle de sonde sur `GET /api/stacks`, cache mémoire daté (§6)
+- [x] API : `GET /stacks`, `GET /stacks/{id}`, `POST /stacks/{id}/start`,
       `POST /stacks/{id}/stop`, `POST /stacks/refresh`
-- [ ] Le secret `PORTAINER_TOKEN` suit le service — il est le plus dangereux du système,
+- [x] Le secret `PORTAINER_TOKEN` suit le service — il est le plus dangereux du système,
       il ne doit plus vivre à côté de la logique métier
 
 ### Phase 3 — `schub-core` + amaigrissement du connecteur Discord
@@ -332,7 +333,7 @@ Le gros morceau. Les deux moitiés d'une même coupe.
 |---|---|
 | 0 — socle | partiellement faite ; squelettes créés le 13-09, contrats à refaire |
 | 1 — connector-freebox | **faite le 15-09** |
-| 2 — connector-portainer | à faire |
+| 2 — connector-portainer | **faite le 16-09** |
 | 3 — core + connector-discord | à faire |
 | 4 — BFF et front | à faire |
 | 5 — connector-riot | à faire |
@@ -465,7 +466,7 @@ Pour chacun :
 Puis, par service :
 
 - [ ] `schub-connector-freebox` — phase 1, le premier à remplir
-- [ ] `schub-connector-portainer` — phase 2, avec la sonde d'état et son cache daté (§6)
+- [x] `schub-connector-portainer` — phase 2 faite le 16-09
 - [ ] `schub-core` — phase 3, le gros morceau
 - [ ] `schub-connector-riot` — phase 5, quand les fonctionnalités seront cadrées
 

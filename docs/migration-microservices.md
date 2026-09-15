@@ -25,6 +25,7 @@ tout le reste vit dans le cœur.**
 | Transport | **HTTP direct partout** | 13-09 |
 | Messagerie | **pas de broker** — voir §5 | 13-09 |
 | Sonde d'état | portée par le connecteur Portainer | 13-09 |
+| Portée du port-forwarding | l'app pilote **tous** les ports, fixes compris | 15-09 |
 
 ### Ce qui a été abandonné
 
@@ -125,6 +126,43 @@ est déjà cassée aujourd'hui.
 
 Discord garde `/start`, `/pause`, `/refresh` et la consultation. Les fiches se saisissent dans
 le front, dont le formulaire est déjà plus complet.
+
+## 4 bis. L'app pilote tous les ports (15-09)
+
+Décidé le 15-09, après avoir vu l'état réel de la box : 44 redirections, toutes ouvertes en
+permanence, aucune libellée.
+
+Le code actuel distingue les règles **gérées** (marquées `[schub]`) des règles **manuelles**,
+qu'il observe sans y toucher. Cette dualité est la vraie complexité du réconciliateur. On la
+supprime : l'app devient la source de vérité de **toute** la table de redirections — les ports
+fixes (Samba, HomeAssistant, web) comme ceux des serveurs de jeu.
+
+Ce qu'on y gagne :
+
+- le `marker` devient inutile, ou purement informatif ;
+- `PortRuleResolver` perd toute sa branche de conflit avec les règles manuelles ;
+- `pruneOrphans` devient le comportement normal au lieu d'une option dangereuse ;
+- **les 44 règles deviennent déclarées**. Aujourd'hui personne ne sait à quoi servent 9065,
+  15000 ou 15777 ; les écrire force à répondre.
+
+### Ce que ça ne change pas
+
+**La réconciliation reste.** Elle ne compense pas une méconnaissance de l'API Freebox — celle-ci
+est un CRUD simple sur `/fw/redir/` avec des ids stables. Elle existe parce que l'état de la box
+*dérive* : appel échoué, redémarrage à contretemps, serveur de jeu mort sans nettoyer. Et c'est
+elle qui justifie l'abandon du broker (§5) : la retirer rouvrirait cette question.
+
+**Le connecteur n'est pas concerné.** C'est de la politique, donc du cœur. La phase 1 reste valide.
+
+### Ordre d'opérations obligatoire
+
+Le marqueur protège aujourd'hui `tcp/445`, `tcp/8123` et `tcp/80` : l'app ne peut pas y toucher.
+Quand elle possédera tout, **une ligne oubliée dans `port-forwarding.yml` fermera Samba ou
+HomeAssistant**. Donc, dans cet ordre, sans raccourci :
+
+1. rester en `dry-run`, et lui faire imprimer ce qu'il *supprimerait* ;
+2. transcrire cette liste dans les règles permanentes ;
+3. relire, puis seulement alors donner les pleins pouvoirs.
 
 ## 5. Transport : HTTP partout, pas de broker
 
@@ -321,6 +359,30 @@ Le gros morceau. Les deux moitiés d'une même coupe.
 - [ ] Secrets `DOCKER_USERNAME` et `DOCKER_PASSWORD` sur les quatre nouveaux repos
       (`gh secret set` sait le faire, mais les valeurs vous appartiennent)
 - [ ] `SONAR_TOKEN` si vous copiez `pr-sonarcloud.yml`
+
+### CI — état au 2026-09-15
+
+Deux blocages découverts en ouvrant les premières PR vers `develop`.
+
+**Impasse de déclenchement, corrigée.** `pr-build.yml` et `pr-sonarcloud.yml` ne se
+déclenchaient que sur les PR vers `main`, alors que la protection de `develop` exige leurs deux
+contrôles. Aucune PR vers `develop` ne pouvait donc satisfaire ses propres contrôles, et le push
+direct était refusé par ailleurs : plus rien n'était fusionnable. `develop` ajouté aux
+déclencheurs dans les trois repos.
+
+**SonarCloud cassé, contourné — À REMETTRE.** Les clés de projet sont restées
+`thomas-jacque-schultz_{Bot,Back,Front}`, les noms d'avant le renommage des repos. SonarCloud
+répond « Not authorized or project not found » et le contrôle échoue depuis le 29-08.
+Contournement du 15-09 : **« SonarCloud Code Analysis » retiré des contrôles *requis* sur
+`develop`** dans les trois repos (le workflow tourne toujours, en informatif).
+
+> À faire : rétablir la liaison des trois projets dans l'interface SonarCloud, mettre les
+> nouvelles clés dans les workflows, puis **remettre le contrôle en requis**. Tant que ce n'est
+> pas fait, `pr - build` est le seul garde-fou sur `develop`.
+
+**Méthode de fusion : `rebase` uniquement.** Les hashes changent à la fusion, donc les gitlinks
+de `Schub` pointant sur des commits de branches de PR deviennent orphelins. Les réaligner après
+chaque fusion de sous-repo
 
 Note sur les images Docker : les nouveaux noms (`schub-connector-discord`, `schub-front`,
 `schub-bff`) n'existeront sur Docker Hub qu'après la prochaine release. Les anciens tags

@@ -267,18 +267,23 @@ vu le comportement réel.
 - [x] Le secret `PORTAINER_TOKEN` suit le service — il est le plus dangereux du système,
       il ne doit plus vivre à côté de la logique métier
 
-### Phase 3 — `schub-core` + amaigrissement du connecteur Discord
+### Phase 3 — `schub-core` + amaigrissement du connecteur Discord — FAITE le 2026-09-16
 
 Le gros morceau. Les deux moitiés d'une même coupe.
 
-- [ ] Déplacer vers le cœur : `GamingServerEntity` (→ `GameServer`), son repository, son service,
+> Le connecteur Discord passe de 3813 à 1738 lignes. Les 30 tests suivent le domaine dans le
+> cœur et y passent. **Le BFF et le front restent à rebrancher — c'est la phase 4, et d'ici là
+> l'interface web est cassée** : elle appelle `/gaming-server` sur le connecteur Discord, qui
+> ne sert plus cette route.
+
+- [x] Déplacer vers le cœur : `GamingServerEntity` (→ `GameServer`), son repository, son service,
       `DockerService` (→ `DeploymentService`), `PortForwardingService`, `PortRuleResolver`,
       `PortForwardingProperties`, `model/portforwarding/*`, `GamingServerController`, le mapper
-- [ ] Appliquer **tous** les renommages du §2 pendant le déplacement — une seule fois
-- [ ] Migration Mongo : collection `servers` vers sa base, `identifier` → `slug`
-- [ ] Supprimer `CreateGamingServerCommand` et `UpdateGamingServerCommand` (§4)
-- [ ] Le connecteur Discord n'a **aucune** projection : il tire `GET /game-servers` périodiquement
-- [ ] Le cœur pousse vers `POST connector-discord/notifications/gameserver-changed`
+- [x] Appliquer **tous** les renommages du §2 pendant le déplacement — une seule fois
+- [x] Migration Mongo : collection `servers` vers sa base, `identifier` → `slug`
+- [x] Supprimer `CreateGamingServerCommand` et `UpdateGamingServerCommand` (§4)
+- [x] Le connecteur Discord n'a **aucune** projection : il tire `GET /game-servers` périodiquement
+- [x] Le cœur pousse vers `POST connector-discord/notifications/gameserver-changed`
 
 ### Phase 4 — BFF et front
 
@@ -334,7 +339,7 @@ Le gros morceau. Les deux moitiés d'une même coupe.
 | 0 — socle | partiellement faite ; squelettes créés le 13-09, contrats à refaire |
 | 1 — connector-freebox | **faite le 15-09** |
 | 2 — connector-portainer | **faite le 16-09** |
-| 3 — core + connector-discord | à faire |
+| 3 — core + connector-discord | **faite le 16-09** |
 | 4 — BFF et front | à faire |
 | 5 — connector-riot | à faire |
 | 6 — nettoyage | à faire |
@@ -467,7 +472,7 @@ Puis, par service :
 
 - [ ] `schub-connector-freebox` — phase 1, le premier à remplir
 - [x] `schub-connector-portainer` — phase 2 faite le 16-09
-- [ ] `schub-core` — phase 3, le gros morceau
+- [x] `schub-core` — phase 3 faite le 16-09
 - [ ] `schub-connector-riot` — phase 5, quand les fonctionnalités seront cadrées
 
 ### 9. `Schub` (parent) — branche `main`

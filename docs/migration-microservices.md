@@ -56,6 +56,69 @@ Renommages de champs :
 - `GamingServerEntity.id` → `GameServer.id` (identifiant Mongo, jamais exposé)
 - `GamesNameEnum` → `Game` · `ServerStatusEnum` → `GameServerStatus`
 
+## 2 bis. Découpage en couches (17-09) — api / business / data
+
+Convention de l'utilisateur, **antérieure à la découpe**, que j'avais perdue en créant
+`schub-core` à la phase 3 : ses paquets étaient à plat (`controller/`, `service/`, `model/`,
+`repository/`, `dto/`, `mapper/`), sans couche.
+
+### La règle
+
+```
+api  --->  business  --->  data
+```
+
+| paquet | contenu | connaît |
+|---|---|---|
+| `api` | `controller/`, `dto/` | `business`, `data` |
+| `business` | services, mappers, objets de valeur internes | `data` et les DTO — **jamais les contrôleurs** |
+| `data` | entités persistées, formes brutes des systèmes externes | personne |
+| `config` | câblage transverse, à la racine | tout le monde — le seul qui en a le droit |
+
+**Pourquoi** : les imports ne partent plus dans tous les sens, et surtout **`api` est la seule
+surface publiable**. Un consommateur Feign n'a besoin que d'`api` — c'est ce qui rend le contrat
+d'un service isolable de son implémentation.
+
+### La tension des connecteurs, et comment elle est tranchée
+
+Dans le cœur, tout est net : `GameServer` (domaine, `data`) et `GameServerDto` (`api`), avec
+`GameServerMapper` (`business`) entre les deux. Business ne voit jamais `api`.
+
+Dans un connecteur, il n'y a pas deux types : `PortRule` est à la fois le retour du service
+métier et le contrat exposé — c'est même la raison d'être du connecteur, traduire
+`FreeboxRedirection` en vocabulaire de domaine. Les deux règles se contredisent.
+
+**Arbitrage : le contrat prime.** `PortRule`, `RouterStatus` et `Stack` vivent dans `api/dto`,
+et le service métier du connecteur retourne un type d'`api`. La règle de direction devient donc
+précisément : **business ne connaît pas les contrôleurs**. L'alternative — dupliquer chaque type
+avec un mapper — ajoutait trois représentations de la même chose à un service dont le métier
+*est* déjà la traduction.
+
+### Pas de contrôle automatique
+
+Proposé, refusé par l'utilisateur : la structure suffit. Les trois paquets existent dans **tous**
+les services, y compris vides (`connector-portainer` ne persiste rien, `connector-riot` est un
+squelette) — un `data/package-info.java` y explique pourquoi. Un paquet absent se lirait comme
+un oubli ; présent et vide, il se lit comme une intention.
+
+### Ce qui a bougé
+
+| service | avant | après |
+|---|---|---|
+| `schub-core` | tout à plat | `api/{controller,dto}`, `business/{service,mapper,model}`, `data/{model,repository,migration}` |
+| `schub-connector-freebox` | `controllers/`, `model/{freebox,portforwarding}` | `api/{controller,dto}`, `data/model` |
+| `schub-connector-portainer` | `controllers/`, `model/` | `api/{controller,dto}`, `data/` (vide, documentée) |
+| `schub-connector-discord` | `controllers/`, `model/` | `api/`, `data/` |
+| `schub-back-bff` | racine `fr.schub.schubback.api` | racine `schultz.thomas.schub.bff` ; `api/controller`, `business/service`, `data/client` |
+| `schub-connector-riot` | `config/` seul | les trois couches créées vides |
+
+Notes sur le BFF : son paquet racine contenait déjà le mot `api`, ce qui rendait la convention
+illisible. Il est passé à `schultz.thomas.schub.bff`, alignant au passage le seul service qui
+vivait en `fr.schub.*`. Ses clients Feign sont en `data/client` : pour un service sans base, la
+couche données est l'endroit d'où viennent les données — ici, les autres services. `pom.xml` :
+`fr.schub:Back` → `schultz.thomas:schub.bff` (rien ne référençait l'ancien artefact ; le
+Dockerfile prend `target/*.jar`). Classe `SchubBackApplication` → `SchubBffApplication`.
+
 ## 3. Cible
 
 ```
@@ -350,10 +413,77 @@ Le gros morceau. Les deux moitiés d'une même coupe.
 - [x] Le connecteur Discord n'a **aucune** projection : il tire `GET /game-servers` périodiquement
 - [x] Le cœur pousse vers `POST connector-discord/notifications/gameserver-changed`
 
-### Phase 4 — BFF et front
+### Phase 4 — BFF et front — FAITE le 2026-09-17 (non exécutée, voir plus bas)
 
-- [ ] BFF : router `/gaming-server/**` vers le cœur, `/discord/**` vers le connecteur Discord
-- [ ] Vérifier la fiche serveur bout en bout, champ « Ports Freebox » compris
+Le front n'appelle plus le connecteur Discord pour le domaine. **L'interface n'est plus cassée.**
+
+**Le BFF a un client par destination**, plus un seul « botClient » fourre-tout :
+`CoreFeignClient` et `ConnectorDiscordFeignClient`, tous deux authentifiés par
+`InternalSecretFeignConfig`. La traduction des pannes amont, qui était recopiée dans chaque
+méthode, tient dans un seul `UpstreamGateway` — et **nomme désormais le service tombé**, ce qui
+n'était pas possible avec un amont unique.
+
+**Chemins exposés au front.** Le `/bot` disparaît, et avec lui la dernière trace du monolithe.
+Le §2 s'applique sans exception, donc `/game-servers`, pas `/gaming-server` :
+
+| avant | après | vers |
+|---|---|---|
+| `/bot/gaming-server` | `/game-servers` | cœur |
+| `/bot/gaming-server/{id}` | `/game-servers/{id}` | cœur |
+| `/bot/gaming-server/public-status` | `/game-servers/public-status` | cœur |
+| `/bot/gaming-server/command/start` | `/game-servers/{slug}/start` | cœur |
+| `/bot/gaming-server/command/pause` | `/game-servers/{slug}/stop` | cœur |
+| `/bot/port-forwarding/**` | `/port-forwarding/**` | cœur |
+| `/bot/portainer/stacks` | `/deployments` | cœur |
+| `/bot/discord/guilds/channels` | `/discord/guilds/channels` | connecteur Discord |
+| `/bot/gaming-server/subscribe-channels` | `/discord/channels/subscribe` | connecteur Discord |
+
+**Démarrer un serveur est une action de domaine.** Le front passait par
+`/gaming-server/command/{start|pause}` du connecteur Discord, avec l'identifiant en corps de
+requête. Cela va maintenant au cœur, par slug. Le chemin des commandes reste au connecteur pour
+ce qu'il sert réellement : les commandes slash de Discord.
+
+**Régression de la phase 3 réparée.** `subscribe-channels` avait disparu avec le contrôleur du
+domaine, laissant un bouton du front en 404 — le connecteur n'avait pourtant jamais cessé d'en
+être capable (`ChannelRepository`, `SubscribeChannelCommand`, et jusqu'aux DTO de la requête).
+Seul le point d'entrée HTTP manquait. Rétabli sous `/discord/channels/subscribe` : choisir un
+salon est une affaire de Discord, pas de serveur de jeu.
+
+**Renommages du §2 appliqués au front** : `identifier` → `slug`, `portainerStackId` →
+`deploymentId`, `gameName` → `game`, `PortainerStackDto` → `DeploymentDto`,
+`identifierFromStackName` → `slugFromDeploymentName`. Le mot « Portainer » ne figure plus nulle
+part dans le front, libellés d'interface compris.
+
+**Le BFF est sans état.** Il portait `spring-boot-starter-data-mongodb` et des identifiants
+**root**, pour zéro usage : aucun repository, aucun `@Document`, aucun `MongoTemplate`.
+Dépendance et identifiants retirés. Plus aucun service applicatif ne détient root.
+
+**Nettoyage de la prod, rendu nécessaire par la phase 4 :**
+
+- `schub-core` **n'existait pas** dans le compose de prod. Ajouté — sans lui le BFF n'a nulle
+  part où router le domaine.
+- `connector-discord` portait encore `CONNECTOR_PORTAINER_URL`, `CONNECTOR_FREEBOX_URL` et les
+  `PORT_FORWARDING_*`. Plus une ligne de son code ne les lit depuis la phase 3. Retirés.
+- Le montage `port_forwarding_config:/etc/schub` est mort : les règles permanentes sont en base
+  (`static_port_rules`) depuis la phase 3. **Le fichier existe toujours sur le disque** et son
+  contenu doit être saisi dans `static_port_rules` avant le premier démarrage de la prod.
+
+#### Ce qui reste à faire
+
+- [ ] **Vérifier la fiche serveur bout en bout**, champ « Ports Freebox » compris. Rien de tout
+      ceci n'a été exécuté : le garde-fou de l'environnement interdit de lancer la stack de dev.
+      Ce qui est vérifié : les trois services compilent, les 30 tests du cœur passent, les deux
+      composes parsent, et le typecheck du front a **exactement** le même jeu d'erreurs qu'avant
+      la phase 4 (33, toutes préexistantes).
+- [ ] `tsconfig.json` du front : `"ignoreDeprecations": "6.0"` est invalide pour TypeScript 5.9
+      — `tsc` refuse de lire la configuration. Préexistant et sans effet sur le build
+      (`vite build` n'appelle pas `tsc`), mais il n'existe donc **aucun typecheck en CI**.
+- [ ] `getGameServerByIdApi` charge toute la liste pour en extraire une fiche : le cœur expose
+      `GET /game-servers/{id}` mais ne résout que l'identifiant Mongo, alors que les appelants
+      passent parfois un slug. À reprendre quand le cœur saura résoudre les deux.
+- [ ] `DockerStatusController` du BFF renvoie « Hello World » sur `/docker/{id}`. Mort, à
+      supprimer en phase 6.
+
 
 ### Phase 5 — `schub-connector-riot`
 
@@ -413,7 +543,7 @@ Le gros morceau. Les deux moitiés d'une même coupe.
 | 1 — connector-freebox | **faite le 15-09** |
 | 2 — connector-portainer | **faite le 16-09** |
 | 3 — core + connector-discord | **faite le 16-09** |
-| 4 — BFF et front | à faire |
+| 4 — BFF et front | **faite le 17-09**, non exécutée (stack non lançable ici) |
 | 5 — connector-riot | à faire |
 | 6 — nettoyage | à faire |
 

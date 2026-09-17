@@ -234,13 +234,14 @@ Chaque phase est déployable et testable seule.
       propriété `bot.internal-secret` → `schub.internal-secret`, variable `BOT_INTERNAL_SECRET`
       → `SCHUB_INTERNAL_SECRET` ; `.gitmodules`, `SUBREPOS` et `artifactId` alignés.
       **À faire à la main : renommer le repo sur GitHub** (voir §11).
-- [x] Bases et utilisateurs Mongo `bot`, `servers`, `riot` (`scripts/mongo-init-databases.js`,
+- [x] Bases et utilisateurs Mongo `bot`, `servers`, `riot` (`Hosting/Tool/CodeInfrastructure/mongo-init-databases.js`,
       `task db:init`) — cloisonnement et idempotence vérifiés
 - [x] Squelettes des 4 nouveaux repos créés et compilant (13-09)
 - [ ] ~~RabbitMQ~~ — retiré le 13-09, voir §5
-- [~] `contracts/` : remplacer l'AsyncAPI par les OpenAPI des trois connecteurs —
-      `connector-freebox` (15-09) et `connector-portainer` (16-09) écrits ; restent
-      `connector-discord` et `core`, tous deux en phase 3
+- [x] ~~`contracts/`~~ — **abandonné le 17-09.** Les OpenAPI écrits à la main ne servaient
+      ni de codegen ni de validation : une seconde source de vérité à côté des contrôleurs,
+      condamnée à dériver. Le contrat vit dans le code des contrôleurs ; une évolution
+      incompatible se traite par la règle du §5 (exposer en parallèle, migrer, retirer).
 
 ### Phase 1 — `schub-connector-freebox` — FAITE le 2026-09-15
 
@@ -329,14 +330,16 @@ Le gros morceau. Les deux moitiés d'une même coupe.
   lecture périmée comme une absence de réponse, pas comme un état.
 - **Sept repos à releaser.** `release.yml` attend l'image de chaque repo séquentiellement ;
   l'attente mérite d'être parallélisée.
-- **Pas de contrats partagés en jar** — délibéré (cadence de release commune évitée), au prix
-  d'une duplication qui dérive si `contracts/` n'est pas tenu à jour.
+- **Pas de contrats partagés en jar ni de contrats écrits** — délibéré (cadence de release
+  commune évitée). Le contrat est ce que servent les contrôleurs : une rupture ne se voit donc
+  qu'à l'appel. C'est le prix assumé de la découpe, et la raison de la règle « exposer en
+  parallèle avant de retirer » du §5.
 
 ## 10. État d'avancement
 
 | Phase | État |
 |---|---|
-| 0 — socle | partiellement faite ; squelettes créés le 13-09, contrats à refaire |
+| 0 — socle | faite ; squelettes créés le 13-09, `contracts/` abandonné le 17-09 |
 | 1 — connector-freebox | **faite le 15-09** |
 | 2 — connector-portainer | **faite le 16-09** |
 | 3 — core + connector-discord | **faite le 16-09** |
@@ -356,15 +359,26 @@ Le gros morceau. Les deux moitiés d'une même coupe.
 - [x] Les quatre ajoutés en submodules (`branch = main`) et à `SUBREPOS`
       dans `Taskfile.yml` et `release.yml`
 
-### Ce qui reste, et que `gh` ne pourra jamais faire
+### Secrets et jetons — fait le 2026-09-17
 
-- [ ] **Étendre le `RELEASE_PAT`** aux quatre nouveaux repos (`contents:write`). GitHub
-      n'expose aucune API pour créer ou modifier un jeton personnel : interface de compte
-      exclusivement. Sans ça, une release échouera à mi-parcours en laissant des tags posés
-      sur certains repos et pas sur les autres.
-- [ ] Secrets `DOCKER_USERNAME` et `DOCKER_PASSWORD` sur les quatre nouveaux repos
-      (`gh secret set` sait le faire, mais les valeurs vous appartiennent)
-- [ ] `SONAR_TOKEN` si vous copiez `pr-sonarcloud.yml`
+- [x] **`RELEASE_PAT` étendu** aux sept sous-repos (`contents:write` + `actions:read`).
+      GitHub n'expose aucune API pour créer ou modifier un jeton personnel : interface de
+      compte exclusivement, et sa valeur n'est pas relisible. Sans cette extension, une
+      release échouait à mi-parcours — les trois premiers repos de `SUBREPOS` poussés et
+      tagués, puis 403 sur `schub-connector-freebox`, laissant trois tags à retirer à la main.
+- [x] `DOCKER_USERNAME` et `DOCKER_PASSWORD` sur les **sept** repos (un seul jeton Docker Hub
+      « Read & Write », posé partout pour n'en avoir qu'un à faire tourner). `DOCKER_USERNAME`
+      n'est pas un secret : c'est `thomasschultzschub`, lisible dans les tags du compose.
+- [x] `SONAR_TOKEN` régénéré et posé sur les trois repos qui ont `pr-sonarcloud.yml`.
+- [ ] `SONAR_TOKEN` sur les quatre nouveaux repos, le jour où ils auront ce workflow.
+
+**Pas de secret partagé possible ici.** GitHub ne partage des secrets qu'au niveau
+*organisation* ; ces repos vivent sous un compte personnel. D'où la duplication assumée
+ci-dessus. Deux sorties si elle devient pénible : transférer les repos dans une organisation
+(gratuit pour des repos publics, mais il faut reprendre les remotes, les URLs de submodules et
+le `thomas-jacque-schultz/` codé en dur dans `release.yml`), ou passer les images sur **GHCR**,
+qui s'authentifie avec le `GITHUB_TOKEN` intégré et supprime les deux secrets Docker au lieu de
+les partager.
 
 ### CI — état au 2026-09-15
 
@@ -376,15 +390,45 @@ contrôles. Aucune PR vers `develop` ne pouvait donc satisfaire ses propres cont
 direct était refusé par ailleurs : plus rien n'était fusionnable. `develop` ajouté aux
 déclencheurs dans les trois repos.
 
-**SonarCloud cassé, contourné — À REMETTRE.** Les clés de projet sont restées
-`thomas-jacque-schultz_{Bot,Back,Front}`, les noms d'avant le renommage des repos. SonarCloud
-répond « Not authorized or project not found » et le contrôle échoue depuis le 29-08.
-Contournement du 15-09 : **« SonarCloud Code Analysis » retiré des contrôles *requis* sur
-`develop`** dans les trois repos (le workflow tourne toujours, en informatif).
+**SonarCloud cassé, contourné le 15-09.** « SonarCloud Code Analysis » a été retiré des
+contrôles *requis* sur `develop` dans les trois repos (le workflow tournait toujours, en
+informatif). `pr - build` est resté le seul garde-fou.
 
-> À faire : rétablir la liaison des trois projets dans l'interface SonarCloud, mettre les
-> nouvelles clés dans les workflows, puis **remettre le contrôle en requis**. Tant que ce n'est
-> pas fait, `pr - build` est le seul garde-fou sur `develop`.
+### SonarCloud réparé le 2026-09-17 — le diagnostic du 15-09 était faux
+
+Le 15-09 la panne avait été imputée aux **clés de projet périmées** après le renommage des
+repos. C'est inexact, et ça a coûté une journée de contournement. Vérification faite par l'API
+publique de SonarCloud : les trois projets existent, sont publics, et SonarCloud a lui-même
+suivi le renommage (`thomas-jacque-schultz_Bot` s'appelle aujourd'hui `schub-connector-discord`).
+**Les clés `_Bot` / `_Back` / `_Front` sont des noms historiques, mais parfaitement valides** —
+il n'y a rien à rebrancher dans l'interface SonarCloud.
+
+Il y avait **deux pannes superposées**, et la seconde aurait survécu à la réparation de la
+première :
+
+1. **Le `SONAR_TOKEN` était expiré** (créé le 04-05, dernière analyse réussie le 11-05).
+   Régénéré sans date d'expiration et reposé sur les trois repos.
+2. **Les deux workflows Java passaient `-Dsonar.login=`, que `sonar-maven-plugin` 4.x ne lit
+   plus.** Le jeton était donc ignoré et l'analyse partait en anonyme. Corrigé : `SONAR_TOKEN`
+   en variable d'environnement du step.
+
+**Pourquoi le mauvais diagnostic a tenu.** Les trois repos donnent deux messages différents, et
+seul celui du front est exploitable :
+
+- Java → « Not authorized or project not found... A project with the same key may already exist
+  in another organization. » Le message **évoque la clé de projet alors que le problème est le
+  jeton** — c'est lui qui a égaré le 15-09.
+- Front → `Failed to query JRE metadata: GET api.sonarcloud.io/analysis/jres ... HTTP 403`.
+  Cet endpoint **ne dépend que du jeton**, il ne connaît aucune clé de projet. Décisif.
+
+Règle à retenir : devant un échec Sonar, croire le message du scanner générique, pas celui du
+plugin Maven. Et vérifier un jeton avant toute autre hypothèse —
+`curl -u '<jeton>:' https://sonarcloud.io/api/authentication/validate` répond `{"valid":true}`
+ou non, en une seconde et sans CI.
+
+- [ ] **Reste à faire** : remettre « SonarCloud Code Analysis » en contrôle *requis* sur
+      `develop` dans les trois repos, une fois la première analyse revenue au vert. Les
+      rulesets « Pr on develop » n'exigent aujourd'hui que `pr - build`.
 
 **Méthode de fusion : `rebase` uniquement.** Les hashes changent à la fusion, donc les gitlinks
 de `Schub` pointant sur des commits de branches de PR deviennent orphelins. Les réaligner après
@@ -410,10 +454,11 @@ Les nouveaux repos viennent après, et `Schub` **en dernier** (voir pourquoi ci-
 
 *6 entrées, tout est cohérent, rien ne bloque.*
 
-- [ ] Relire et committer :
-      `Hosting/Tool/CodeInfrastructure/{Taskfile.yml, docker-compose.dev.yml, docker-compose.yml}`,
-      `port-forwarding.example.yml`, `contracts/`, `scripts/`
-- [ ] Écrire les OpenAPI dans `contracts/` au fil des phases 1 à 3
+- [ ] Relire et committer : `Hosting/Tool/CodeInfrastructure/{Taskfile.yml,
+      docker-compose.dev.yml, docker-compose.yml, port-forwarding.example.yml,
+      mongo-init-databases.js, mongo-migrate-servers-to-core.js}`
+- [x] Rangement du 17-09 : `contracts/` supprimé, les deux scripts Mongo descendus à côté du
+      compose qu'ils servent — la racine du repo d'infra ne porte plus que des stacks
 - [ ] **Collision DNS dev/prod** : donner à la stack de dev son propre réseau bridge et ne
       garder `schub` que pour joindre `admin-portainer` (§9)
 

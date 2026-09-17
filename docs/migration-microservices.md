@@ -802,3 +802,86 @@ Puis, par service :
 - [ ] **GitHub** : renommer `schub-back-bot-server`, créer les quatre nouveaux repos (§11)
 - [ ] **Docker Hub** : les nouveaux noms d'images n'existeront qu'après la prochaine release.
       Ne pas tenter de déployer la prod avant.
+
+## 13. Authentification Discord — décidé le 2026-09-17, à faire APRÈS la 2.0.0
+
+### Le besoin
+
+Les utilisateurs se connectent au front avec leur compte Discord. C'est leur identité réelle :
+le connecteur détient déjà une collection `users` avec `discordId`, `discordUsername` et un
+`UserPrivilegeEnum` (USER / MODERATOR / ADMINISTRATOR / OWNER).
+
+### L'état de départ, et ce qu'il révèle
+
+Il existe **deux systèmes d'identité**, dont un mort :
+
+- **BFF** : un `InMemoryUserDetailsManager` avec **un seul compte**, nom et mot de passe pris
+  dans l'environnement. BCrypt, JWT signé HMAC, expiration 1 h. Techniquement sain, mais un
+  compte partagé, sans traçabilité ni révocation.
+- **Connecteur Discord** : `UserEntity` porte `authUsername` et `passwordHash`, et le repository
+  expose `findByAuthUsername`. **Rien ne les écrit ni ne les lit** — le mapper les ignore
+  explicitement. Vestige d'une tentative abandonnée. À supprimer avec cette phase.
+
+### Décisions de l'utilisateur
+
+1. **Le compte par mot de passe est conservé en secours.** Discord devient la voie normale ; le
+   mot de passe reste la porte de service si Discord est indisponible, si le bot perd une guilde,
+   ou en cas de verrouillage par erreur en changeant les privilèges.
+2. **Tout le monde peut se connecter.** Pas de restriction de guilde, pas d'inscription
+   préalable : un compte Discord inconnu est créé au premier accès avec le privilège le plus bas.
+   **C'est l'administrateur qui attribue ensuite les droits.**
+3. **Après la 2.0.0.** On ne mélange pas un chantier d'identité avec une migration qui a déjà
+   quatre phases à clore.
+
+### ⚠️ Condition préalable : le BFF ne contrôle AUCUN rôle
+
+Aujourd'hui sa règle est `anyRequest().authenticated()`, sans un seul `hasRole` — et le
+`isAdmin` du front ne fait que **masquer des boutons**. C'est sans danger tant qu'il n'existe
+qu'un utilisateur, qui est l'administrateur.
+
+La décision n°2 change cela du tout au tout : n'importe quel compte Discord obtiendrait un jeton
+valide, donc l'accès à `POST /game-servers`, à la suppression de règles de ports, au démarrage
+et à l'arrêt des serveurs. **C'est une élévation de privilèges, pas un détail d'ergonomie.**
+
+L'autorisation par rôle dans le BFF n'est donc pas une amélioration optionnelle de cette phase :
+elle en est la condition d'existence. Elle doit être écrite **avant** d'ouvrir la connexion.
+
+### La forme retenue
+
+Pas de Keycloak. L'identité *est* Discord ; passer par un fournisseur intermédiaire pour
+fédérer Discord ajouterait un service avec sa base, sa mémoire et sa dette de mise à jour, à une
+chaîne qui n'en a pas besoin. (Keycloak redeviendrait pertinent pour un SSO de tout le homelab —
+Grafana, Portainer, Nextcloud — mais c'est un autre projet.)
+
+```
+front  --(1) Se connecter avec Discord-->  BFF  --(2) OAuth2-->  Discord
+                                            |
+                                            | (3) GET /discord/users/{id}/privilege
+                                            v
+                                     connector-discord  (propriétaire de l'identité)
+                                            |
+                                            | (4) privilège, créé en USER si inconnu
+                                            v
+                                     BFF émet SON JWT, avec le rôle dedans
+```
+
+Le BFF reste **sans état** : il ne lit pas Mongo, il demande. Le connecteur garde la propriété de
+l'identité Discord, conformément au §4.
+
+### À faire
+
+- [ ] **D'abord** : autorisation par rôle dans le BFF, route par route. Rien d'autre ne commence
+      avant.
+- [ ] Connecteur : exposer `GET /discord/users/{discordId}` — privilège et nom, créé en USER si
+      inconnu. Et `PUT /discord/users/{discordId}/privilege` pour que l'administrateur attribue
+      les droits.
+- [ ] BFF : flux OAuth2 Discord (`/auth/discord`, `/auth/discord/callback`), échange du code,
+      lecture de `/users/@me`, puis émission du JWT maison avec le rôle.
+- [ ] Front : bouton « Se connecter avec Discord », et **un écran de gestion des utilisateurs** —
+      il n'existe pas, et la décision n°2 le rend indispensable.
+- [ ] Décider ce que voit un USER. Le front est binaire aujourd'hui (`isAdmin`) ; MODERATOR n'y
+      sert à rien. Quatre privilèges pour un booléen, c'est à trancher.
+- [ ] Supprimer `authUsername` et `passwordHash` de `UserEntity`, et `findByAuthUsername`.
+- [ ] Secrets : `DISCORD_OAUTH_CLIENT_ID` et `DISCORD_OAUTH_CLIENT_SECRET`, et l'URL de rappel
+      déclarée dans le portail développeur Discord — pour le dev ET pour la prod.
+

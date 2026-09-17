@@ -2,7 +2,7 @@ name: release
 
 # Release manuelle, déclenchée à la demande.
 # Fait, dans l'ordre :
-#   1. sur chaque sous-repo (BFF/Bot/Front) : fast-forward main <- develop, tag vX.Y.Z, push
+#   1. sur chaque sous-repo : aligne main sur develop, tag vX.Y.Z, push
 #   2. attend que le build docker (déjà existant dans chaque sous-repo) se termine
 #   3. aligne les gitlinks de ce repo parent sur les commits tagués, tag le parent
 #   4. publie une release GitHub agrégée sur ce repo
@@ -19,12 +19,17 @@ on:
       version:
         description: "Version à releaser, ex: v1.2.3"
         required: true
+      allow_main_rewrite:
+        description: "Réaligner main même s'il porte des commits absents de develop (vérifier d'abord ce qu'ils contiennent)"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
 
 env:
   VERSION: ${{ inputs.version }}
+  ALLOW_MAIN_REWRITE: ${{ inputs.allow_main_rewrite }}
   GH_TOKEN: ${{ secrets.RELEASE_PAT }}
   SUBREPOS: schub-back-bff schub-connector-discord schub-front-servers schub-connector-freebox schub-connector-portainer schub-connector-riot schub-core
 
@@ -50,7 +55,7 @@ jobs:
           git config --global user.name "release-bot"
           git config --global user.email "release-bot@users.noreply.github.com"
 
-      - name: Release chaque sous-repo (fast-forward main + tag)
+      - name: Release chaque sous-repo (aligne main sur develop + tag)
         run: |
           set -e
           for repo in ${SUBREPOS}; do
@@ -58,11 +63,30 @@ jobs:
             git clone --quiet "https://x-access-token:${GH_TOKEN}@github.com/thomas-jacque-schultz/${repo}.git" "/tmp/${repo}"
             cd "/tmp/${repo}"
 
-            git checkout main
-            if ! git merge-base --is-ancestor origin/develop main; then
-              git merge --ff-only origin/develop
+            # `main` est le POINTEUR de l'état publié ; `develop` est la source de vérité.
+            # Sa protection impose un historique linéaire (allowed_merge_methods: rebase), donc
+            # un back-merge de main vers develop est impossible : on aligne main sur develop.
+            #
+            # L'ancienne version faisait un `merge --ff-only`, qui mourait sur un « Not possible
+            # to fast-forward » illisible dès qu'un correctif avait été posé directement sur main
+            # sans être reporté sur develop. C'est arrivé le 17-09, sur deux des sept sous-repos.
+            #
+            # Rien n'est perdu pour autant : chaque état publié reste atteignable par son tag.
+            extra="$(git log --oneline origin/develop..origin/main || true)"
+            if [ -n "${extra}" ]; then
+              echo "main porte des commits absents de develop :"
+              echo "${extra}"
+              if [ "${ALLOW_MAIN_REWRITE}" != "true" ]; then
+                echo "Error: leur contenu serait perdu en alignant main sur develop."
+                echo "       Vérifier ce qu'ils portent, puis soit reporter ce contenu sur"
+                echo "       develop, soit relancer avec allow_main_rewrite=true."
+                exit 1
+              fi
+              echo "allow_main_rewrite=true : main est réaligné malgré tout."
             fi
-            git push origin main
+
+            git checkout -q -B main origin/develop
+            git push --force-with-lease origin main
 
             if git rev-parse "${VERSION}" >/dev/null 2>&1; then
               echo "Error: le tag ${VERSION} existe déjà sur ${repo}"

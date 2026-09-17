@@ -221,6 +221,70 @@ Le connecteur sonde **toutes** les stacks sans savoir lesquelles sont des serveu
 c'est le cœur qui trie. Le cœur conserve la notion métier de changement de statut
 (`statusHistory`, notification à Discord) ; le connecteur ne fait que refléter Portainer.
 
+## 6 bis. Migrations de schéma et ordre de démarrage (17-09)
+
+### Ce qui a déclenché le sujet
+
+La prod **a déjà tourné**, contrairement à ce qui était noté ici. Ses données sont toujours
+sur le disque, à `/mnt/volume/MongoBot` (fichiers WiredTiger d'août 2025, dossier touché le
+20 avril 2026), **à l'ancien schéma** : base `discordbot`, champs `identifier` et
+`portainerStackId`. Un `MongoBotDev` en est une copie conforme datée du même jour.
+
+Deux bugs trouvés en le vérifiant :
+
+1. **Le compose de prod pointait sur `/mnt/volume/BotFront/Database`, qui n'existe pas.** Avec
+   `type: none, o: bind`, Docker refuse de monter un chemin absent : `schub-mongo` n'aurait pas
+   démarré. Ce chemin n'a jamais changé depuis la création du repo — la prod qui a tourné
+   n'utilisait donc pas ce fichier. Corrigé vers `/mnt/volume/MongoBot`.
+2. **Le cloisonnement Mongo n'était qu'à moitié fait.** Le cœur utilisait bien son utilisateur
+   `servers`, mais `connector-discord` se connectait toujours en **root**, et l'utilisateur
+   `bot` créé par `mongo-init-databases.js` ne servait à personne — il était de surcroît créé
+   sur une base `bot` que rien n'utilise, alors que les données sont dans `discordbot`.
+   Corrigé : l'utilisateur `bot` est créé sur `discordbot`, le connecteur s'y connecte, et
+   **plus aucun service applicatif ne détient les identifiants root**.
+
+### La règle : Mongock possède le schéma, une seule exception
+
+Les évolutions du schéma de `servers` sont des classes `@ChangeUnit` dans
+`schub-core`, paquet `schultz.thomas.schub.core.migration` (Mongock 5.5.1). Appliquées au
+démarrage, dans l'ordre, une seule fois, tracées en base. **Rien à lancer à la main.**
+
+Première migration écrite : `V001_GameServerSlugUniqueIndex`. Elle a un vrai contenu —
+`GameServer.slug` porte `@Indexed(unique = true)`, mais cette annotation est **inerte** parce
+que Spring Boot 3 laisse `auto-index-creation` à `false`. L'index d'unicité n'a donc jamais
+existé, alors que le slug est l'identité du domaine et la lecture chaude (`findBySlug`).
+
+**L'exception, et pourquoi elle en est une.** Le déplacement historique
+`discordbot.servers` → `servers.servers` enjambe deux bases. Le cœur se connecte avec
+l'utilisateur `servers`, qui n'a de droits que sur `servers` : il ne *peut pas* lire
+`discordbot`, et ne doit pas obtenir ce droit. Ce droit ne servirait **qu'une fois**, au
+basculement de la prod, et resterait acquis pour toujours — dans un an, plus personne ne sait
+pourquoi le cœur peut lire la base du connecteur Discord, et du code finit par s'appuyer
+dessus. La frontière entre services est précisément ce que la découpe achète.
+
+Ce déplacement reste donc une opération d'exploitation lancée en root :
+`task db:migrate:legacy`. **C'est le dernier script manuel du système.**
+
+### Ordre de démarrage : deux réponses, pas une
+
+**Docker Swarm ignore `depends_on`.** L'ordre de lancement ne s'exprime pas dans un compose
+déployé en stack — c'est un fait de Swarm, pas un oubli. La prod ne peut donc compter que sur
+la résilience : `restart_policy: condition: any`, et des services qui tolèrent d'arriver trop
+tôt. C'est déjà le cas par construction (§5 : boucle de réconciliation, pull pour la
+correction), et c'est un argument de plus pour l'absence de broker.
+
+**En dev**, qui est du compose classique, `depends_on` fonctionne et est désormais utilisé :
+
+| service | attend | pourquoi |
+|---|---|---|
+| `dev-schub-core` | `dev-schub-mongo` sain | pas de migration sur une base injoignable |
+| `dev-connector-discord` | `dev-schub-mongo` **et** `dev-schub-core` sains | ne pas lire un schéma en cours de transformation |
+
+Le cœur expose une sonde sur `/actuator/health/readiness`. Elle ne passe au vert qu'une fois
+le contexte Spring démarré, donc **après** les migrations Mongock : `service_healthy` y signifie
+« le schéma est à jour », pas seulement « le port répond ». C'est ce qui donne sa valeur à la
+dépendance ; sans la sonde, `depends_on` n'attendrait que le démarrage du conteneur.
+
 ## 7. Phases
 
 Chaque phase est déployable et testable seule.
@@ -330,6 +394,12 @@ Le gros morceau. Les deux moitiés d'une même coupe.
   lecture périmée comme une absence de réponse, pas comme un état.
 - **Sept repos à releaser.** `release.yml` attend l'image de chaque repo séquentiellement ;
   l'attente mérite d'être parallélisée.
+- **La prod n'est pas un terrain vierge** : ses données existent à `/mnt/volume/MongoBot`, à
+  l'ancien schéma. Le premier démarrage du cœur en prod doit être précédé de
+  `task db:migrate:legacy`, sinon le cœur lit une base vide et la réconciliation ferme des
+  ports de serveurs qui tournent.
+- **Swarm ignore `depends_on`** : aucun ordre de démarrage n'est garanti en prod. Tout service
+  qui suppose qu'un autre est déjà là est un bug qui n'apparaîtra qu'au déploiement.
 - **Pas de contrats partagés en jar ni de contrats écrits** — délibéré (cadence de release
   commune évitée). Le contrat est ce que servent les contrôleurs : une rupture ne se voit donc
   qu'à l'appel. C'est le prix assumé de la découpe, et la raison de la règle « exposer en
@@ -339,7 +409,7 @@ Le gros morceau. Les deux moitiés d'une même coupe.
 
 | Phase | État |
 |---|---|
-| 0 — socle | faite ; squelettes créés le 13-09, `contracts/` abandonné le 17-09 |
+| 0 — socle | faite ; squelettes 13-09, `contracts/` abandonné et cloisonnement Mongo terminé le 17-09 |
 | 1 — connector-freebox | **faite le 15-09** |
 | 2 — connector-portainer | **faite le 16-09** |
 | 3 — core + connector-discord | **faite le 16-09** |
@@ -426,9 +496,39 @@ plugin Maven. Et vérifier un jeton avant toute autre hypothèse —
 `curl -u '<jeton>:' https://sonarcloud.io/api/authentication/validate` répond `{"valid":true}`
 ou non, en une seconde et sans CI.
 
+Il y avait en réalité **une troisième cause, propre au BFF** : son `pom.xml` ne déclarait pas
+`sonar-maven-plugin`. Maven ne résout un préfixe de goal que dans les groupes de plugins par
+défaut, auxquels `org.sonarsource.scanner.maven` n'appartient pas — `sonar:sonar` échouait donc
+sur « No plugin found for prefix 'sonar' », avant toute question d'authentification. Le
+connecteur Discord déclarait déjà ce plugin, d'où deux repos qui semblaient avoir la même panne
+sans l'avoir. Signe distinctif : ses runs duraient 13 s là où ceux du Discord duraient 1 min.
+
+**Les trois analyses passent depuis le 17-09.**
+
+### Vert ne veut pas dire vert — le piège avant de remettre le contrôle en requis
+
+`mvn sonar:sonar` **n'attend pas le verdict du quality gate** : il envoie l'analyse et sort en 0.
+Le job GitHub est donc vert même quand SonarCloud refuse le code. Le contrôle « SonarCloud Code
+Analysis », lui, est posté par l'application GitHub de SonarCloud et reflète le *gate*. Le
+remettre en requis alors que les jobs sont verts bloque donc des PR sans prévenir.
+
+État des gates au 17-09, après réparation :
+
+- `schub-connector-discord` — **OK**. Deux findings corrigés : une méthode vide sans appelant
+  depuis la phase 3, et `S3077` sur la vue. Sur ce dernier, `List.copyOf` ne suffit pas :
+  **la règle est syntaxique**, elle refuse `volatile` sur tout champ dont le type déclaré n'est
+  pas prouvablement immuable, et `List` est une interface. Le champ est passé en
+  `AtomicReference`, qui exprime l'échange atomique de référence ; le `List.copyOf` reste, car
+  c'est lui la garantie d'immuabilité — le cœur rend un `ArrayList` que `all()` laissait fuir.
+- `schub-back-bff` — **ERROR sur `new_coverage`** : 0 % contre 80 % exigés, le repo n'a aucun
+  test. **Décision de politique qualité en attente**, pas une panne. Soit reprendre ce que fait
+  déjà le connecteur Discord (`<sonar.coverage.exclusions>**/*</sonar.coverage.exclusions>` dans
+  son pom, ce qui retire la couverture du gate — et explique que sa PR ne bute pas dessus), soit
+  écrire des tests et ajouter JaCoCo.
+
 - [ ] **Reste à faire** : remettre « SonarCloud Code Analysis » en contrôle *requis* sur
-      `develop` dans les trois repos, une fois la première analyse revenue au vert. Les
-      rulesets « Pr on develop » n'exigent aujourd'hui que `pr - build`.
+      `develop` dans les trois repos — **une fois les gates verts, pas les jobs**. Les rulesets
+      « Pr on develop » n'exigent aujourd'hui que `pr - build`.
 
 **Méthode de fusion : `rebase` uniquement.** Les hashes changent à la fusion, donc les gitlinks
 de `Schub` pointant sur des commits de branches de PR deviennent orphelins. Les réaligner après
@@ -436,8 +536,12 @@ chaque fusion de sous-repo
 
 Note sur les images Docker : les nouveaux noms (`schub-connector-discord`, `schub-front`,
 `schub-bff`) n'existeront sur Docker Hub qu'après la prochaine release. Les anciens tags
-restent sous les anciens noms. Sans conséquence puisque la stack de prod n'est pas déployée,
-mais il ne faut pas tenter un déploiement avant d'avoir releasé.
+restent sous les anciens noms. Sans conséquence puisque la stack de prod ne tourne pas
+actuellement, mais il ne faut pas tenter un déploiement avant d'avoir releasé.
+
+> **Ne pas lire « ne tourne pas » comme « n'a jamais tourné ».** Elle a tourné jusqu'en avril
+> 2026 et **ses données existent toujours** (§6 bis). L'erreur coûte cher : elle fait croire
+> que la prod démarrera sur une base vierge, alors qu'elle démarrera sur l'ancien schéma.
 
 ## 12. À faire, repo par repo
 
@@ -459,6 +563,11 @@ Les nouveaux repos viennent après, et `Schub` **en dernier** (voir pourquoi ci-
       mongo-init-databases.js, mongo-migrate-servers-to-core.js}`
 - [x] Rangement du 17-09 : `contracts/` supprimé, les deux scripts Mongo descendus à côté du
       compose qu'ils servent — la racine du repo d'infra ne porte plus que des stacks
+- [x] 17-09 : chemin du volume Mongo de prod corrigé (`BotFront/Database` inexistant →
+      `MongoBot`), `connector-discord` passé de root à l'utilisateur `bot`, `depends_on` du
+      dev branché sur des sondes de santé, tâche `db:migrate:legacy` ajoutée (§6 bis)
+- [ ] **Avant le premier démarrage du cœur en prod** : lancer `task db:migrate:legacy` contre
+      la base de prod, et créer le secret Swarm `MONGO_BOT_PASSWORD`
 - [ ] **Collision DNS dev/prod** : donner à la stack de dev son propre réseau bridge et ne
       garder `schub` que pour joindre `admin-portainer` (§9)
 

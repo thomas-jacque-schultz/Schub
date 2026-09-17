@@ -468,13 +468,37 @@ Dépendance et identifiants retirés. Plus aucun service applicatif ne détient 
   (`static_port_rules`) depuis la phase 3. **Le fichier existe toujours sur le disque** et son
   contenu doit être saisi dans `static_port_rules` avant le premier démarrage de la prod.
 
+#### Vérifié en exécution le 17-09
+
+La stack de dev a été relancée entièrement. **Trois défauts que la compilation ne pouvait pas
+voir** sont apparus — les services compilaient, les 30 tests passaient, et rien ne fonctionnait :
+
+1. **`@EnableMongock` manquait.** Le module `mongock-springboot-v3` ne déclare **aucune**
+   auto-configuration : ni `spring.factories`, ni `META-INF/spring/*.imports`. Sans l'annotation,
+   les propriétés `mongock.*` sont lues sans effet et aucune migration ne part, en silence.
+2. **`migration-scan-package` pointait sur l'ancien paquet** — le refactor des couches avait
+   déplacé la migration en `core.data.migration`.
+3. **`InternalSecretFilter` rejetait `/actuator/health`.** Un filtre posé par `addFilterBefore`
+   s'exécute avant que le `permitAll` ne s'applique : le `permitAll` ne le protège pas. Le cœur
+   ne devenait jamais sain, donc le BFF et le connecteur Discord ne démarraient pas du tout.
+   C'est le `depends_on` de la phase 4 qui a rendu le défaut visible ; il était latent dans les
+   cinq services, et corrigé dans les cinq.
+
+**Ce qui est prouvé, en vrai :**
+
+- `APPLIED - {"id"="gameserver-slug-unique-index", "class"="V001_GameServerSlugUniqueIndex"}`
+- cœur `healthy`, neuf conteneurs debout, `depends_on` respecté — le connecteur Discord et le
+  BFF ont bien attendu que le cœur soit **sain**, pas seulement démarré
+- chaîne complète : `GET /api/game-servers/public-status` sur le front renvoie
+  `[{"name":"satisfactory-test","game":"Satisfactory","status":"ONLINE"}]` — front → BFF → cœur
+- le connecteur Discord tire du cœur et met à jour ses messages
+- `vite build` passe (il échouait en CI sur la PR #2)
+
 #### Ce qui reste à faire
 
-- [ ] **Vérifier la fiche serveur bout en bout**, champ « Ports Freebox » compris. Rien de tout
-      ceci n'a été exécuté : le garde-fou de l'environnement interdit de lancer la stack de dev.
-      Ce qui est vérifié : les trois services compilent, les 30 tests du cœur passent, les deux
-      composes parsent, et le typecheck du front a **exactement** le même jeu d'erreurs qu'avant
-      la phase 4 (33, toutes préexistantes).
+- [ ] **Vérifier la fiche serveur dans le navigateur**, champ « Ports Freebox » compris. Les
+      routes authentifiées n'ont pas été testées : elles demandent un JWT, donc les identifiants.
+
 - [ ] `tsconfig.json` du front : `"ignoreDeprecations": "6.0"` est invalide pour TypeScript 5.9
       — `tsc` refuse de lire la configuration. Préexistant et sans effet sur le build
       (`vite build` n'appelle pas `tsc`), mais il n'existe donc **aucun typecheck en CI**.

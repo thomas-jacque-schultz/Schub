@@ -88,12 +88,20 @@ jobs:
             git checkout -q -B main origin/develop
             git push --force-with-lease origin main
 
-            if git rev-parse "${VERSION}" >/dev/null 2>&1; then
-              echo "Error: le tag ${VERSION} existe déjà sur ${repo}"
-              exit 1
+            # Idempotent : si le tag existe déjà ET pointe sur le commit qu'on release, on
+            # continue. C'est le cas quand une release a échoué plus loin (attente du build,
+            # gitlinks) et qu'on la relance. Refuser serait bloquer une reprise légitime.
+            # S'il pointe ailleurs, en revanche, on s'arrête : deux contenus sous un même nom.
+            if git rev-parse -q --verify "refs/tags/${VERSION}" >/dev/null; then
+              if [ "$(git rev-parse "refs/tags/${VERSION}^{commit}")" != "$(git rev-parse HEAD)" ]; then
+                echo "Error: ${VERSION} existe déjà sur ${repo} et pointe sur un AUTRE commit"
+                exit 1
+              fi
+              echo "${VERSION} existe déjà et pointe au bon endroit, on continue"
+            else
+              git tag -a "${VERSION}" -m "release ${VERSION}"
+              git push origin "${VERSION}"
             fi
-            git tag -a "${VERSION}" -m "release ${VERSION}"
-            git push origin "${VERSION}"
 
             git rev-parse HEAD > "/tmp/${repo}.sha"
             cd - >/dev/null
@@ -133,8 +141,22 @@ jobs:
             sha="$(cat "/tmp/${repo}.sha")"
             git update-index --cacheinfo 160000,"${sha}","${repo}"
           done
-          git commit -m "release: ${VERSION}"
-          git tag -a "${VERSION}" -m "release ${VERSION}"
+
+          # « nothing to commit » est un cas NORMAL, pas une panne : les gitlinks peuvent déjà
+          # pointer sur les commits qu'on release, par exemple s'ils ont été réalignés à la main
+          # après la fusion des PR. C'est ce qui a fait échouer la release du 17-09, alors que
+          # les sept sous-repos étaient déjà tagués et leurs images publiées.
+          if git diff --cached --quiet; then
+            echo "Les gitlinks pointent déjà sur les commits releasés, rien à committer."
+          else
+            git commit -m "release: ${VERSION}"
+          fi
+
+          if git rev-parse -q --verify "refs/tags/${VERSION}" >/dev/null; then
+            echo "${VERSION} existe déjà sur Schub, on ne le recrée pas"
+          else
+            git tag -a "${VERSION}" -m "release ${VERSION}"
+          fi
           git push origin main "${VERSION}"
 
       - name: Publie la release GitHub
@@ -146,4 +168,10 @@ jobs:
             sha="$(cat "/tmp/${repo}.sha")"
             notes+="- ${repo}: ${sha:0:7}"$'\n'
           done
-          gh release create "${VERSION}" --title "${VERSION}" --notes "${notes}"
+          # Idempotent comme les étapes précédentes : une release relancée met à jour la note
+          # au lieu d'échouer sur « release already exists ».
+          if gh release view "${VERSION}" >/dev/null 2>&1; then
+            gh release edit "${VERSION}" --title "${VERSION}" --notes "${notes}"
+          else
+            gh release create "${VERSION}" --title "${VERSION}" --notes "${notes}"
+          fi

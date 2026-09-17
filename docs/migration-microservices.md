@@ -288,10 +288,20 @@ c'est le cœur qui trie. Le cœur conserve la notion métier de changement de st
 
 ### Ce qui a déclenché le sujet
 
-La prod **a déjà tourné**, contrairement à ce qui était noté ici. Ses données sont toujours
-sur le disque, à `/mnt/volume/MongoBot` (fichiers WiredTiger d'août 2025, dossier touché le
-20 avril 2026), **à l'ancien schéma** : base `discordbot`, champs `identifier` et
-`portainerStackId`. Un `MongoBotDev` en est une copie conforme datée du même jour.
+Un répertoire de données Mongo existe à `/mnt/volume/MongoBot` (fichiers WiredTiger d'août
+2025, dossier touché le 20 avril 2026), et un `MongoBotDev` à côté.
+
+> **CORRECTION DU 17-09, APRÈS VÉRIFICATION RÉELLE.** J'ai d'abord écrit ici que la prod avait
+> tourné et que ces données étaient « à l'ancien schéma », base `discordbot`. **C'est faux.**
+> J'avais déduit de la présence des fichiers, sans les lire.
+>
+> Vérifié en démarrant un Mongo jetable sur une copie des deux répertoires : ils ne contiennent
+> que `admin`, `config` et `local` — **aucune base applicative**, ni `discordbot`, ni `servers`,
+> ni quoi que ce soit. Et **aucun utilisateur**, pas même root. Les 800 Mo sont à 200 Mo de
+> `diagnostic.data` ; les 20 fichiers `.wt` sont les collections système.
+>
+> **Il n'y a donc rien à migrer en prod**, et rien à sauvegarder avant de déployer. La seule
+> donnée Schub vivante est celle du dev, dans le volume `schub-dev_mongo_data_dev`.
 
 Deux bugs trouvés en le vérifiant :
 
@@ -548,10 +558,15 @@ voir** sont apparus — les services compilaient, les 30 tests passaient, et rie
   lecture périmée comme une absence de réponse, pas comme un état.
 - **Sept repos à releaser.** `release.yml` attend l'image de chaque repo séquentiellement ;
   l'attente mérite d'être parallélisée.
-- **La prod n'est pas un terrain vierge** : ses données existent à `/mnt/volume/MongoBot`, à
-  l'ancien schéma. Le premier démarrage du cœur en prod doit être précédé de
-  `task db:migrate:legacy`, sinon le cœur lit une base vide et la réconciliation ferme des
-  ports de serveurs qui tournent.
+- **La prod EST un terrain vierge** (vérifié le 17-09, §6 bis) : son répertoire Mongo ne
+  contient aucune base applicative et **aucun utilisateur, pas même root**. Deux conséquences
+  qui bloquent le premier déploiement :
+  - `MONGO_INITDB_ROOT_USERNAME/PASSWORD` **ne créeront pas root** : l'image Mongo n'exécute son
+    initialisation que sur un répertoire VIDE, et celui-ci ne l'est pas. Vérifié en rejouant le
+    démarrage de prod sur une copie.
+  - Sans root, aucun service ne s'authentifie, et `task db:init:prod` non plus — il se connecte
+    justement en root. Il faut donc soit vider le répertoire pour laisser l'image initialiser
+    proprement, soit créer root par l'exception localhost depuis l'intérieur du conteneur.
 - **Swarm ignore `depends_on`** : aucun ordre de démarrage n'est garanti en prod. Tout service
   qui suppose qu'un autre est déjà là est un bug qui n'apparaîtra qu'au déploiement.
 - **Pas de contrats partagés en jar ni de contrats écrits** — délibéré (cadence de release
@@ -693,9 +708,9 @@ Note sur les images Docker : les nouveaux noms (`schub-connector-discord`, `schu
 restent sous les anciens noms. Sans conséquence puisque la stack de prod ne tourne pas
 actuellement, mais il ne faut pas tenter un déploiement avant d'avoir releasé.
 
-> **Ne pas lire « ne tourne pas » comme « n'a jamais tourné ».** Elle a tourné jusqu'en avril
-> 2026 et **ses données existent toujours** (§6 bis). L'erreur coûte cher : elle fait croire
-> que la prod démarrera sur une base vierge, alors qu'elle démarrera sur l'ancien schéma.
+> **La prod démarrera bien sur une base vierge** — vérifié le 17-09 en lisant réellement le
+> répertoire Mongo (§6 bis). J'avais écrit ici le contraire, en déduisant de l'existence des
+> fichiers sans les ouvrir. Il n'y a ni donnée applicative, ni utilisateur.
 
 ## 12. À faire, repo par repo
 

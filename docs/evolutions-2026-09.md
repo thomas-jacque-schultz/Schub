@@ -781,11 +781,16 @@ service, pas de messagerie entre services.
 | D.8 | **Panneau 1 — joueurs** : 5 colonnes de statistiques individuelles, rang, LP | |
 | D.9 | **Panneau 2 — équipe** : résultats des parties d'équipe, toutes files, `queueId` affiché | le cœur de la demande |
 | D.10 | Revue par joueur (notes attachées à une partie) | |
-| D.11 | Planification : créneaux de disponibilité, session programmée, annonce dans un salon Discord (réutilise `connector-discord`) | |
 
 **D.4 → D.6 livrent un outil complet sans qu'une seule partie ait été collectée** : créer son
 équipe, voir les pools de champions, préparer des drafts. C'est la première version publiable, et
 elle ne dépend d'aucune ingestion. D.7 ouvre ensuite tout le volet statistiques d'un coup.
+
+**D.11 retiré le 2026-09-22.** Un module de calendrier — créneaux de disponibilité, session
+programmée, annonce Discord — n'a **jamais été demandé**. Il venait d'une lecture trop large de
+« planifier nos scrims » : ce que l'utilisateur voulait, c'est que les données aident à décider,
+et c'est ce que livrent D.8 et D.9. Les quatre besoins réellement exprimés — effectif et data
+commune, outil de draft, revue par membre, liaison Discord ↔ Riot — sont couverts par D.2 à D.10.
 
 **Sur le nommage** : plus de `scrim` dans le code (§D.0). Le paquet est `team`, l'objet central
 est une partie d'équipe, et le mot « scrim » ne reste que dans le nom de ce document.

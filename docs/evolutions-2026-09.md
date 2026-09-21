@@ -255,6 +255,26 @@ réponse est d'allonger la durée, pas d'ajouter un refresh token.
 
 ### A.3 · OAuth2 Discord dans le BFF
 
+> **Livré côté back le 2026-09-19** (`schub-core`#4, `schub-back-bff`#9, fusionnées). Le front —
+> bouton et bascule au cookie — est en cours. Ce qui suit reste la référence de conception ;
+> trois points ont été tranchés à l'écriture et méritent d'être connus :
+>
+> - **Le `state` et le vérificateur PKCE vivent dans deux cookies de dix minutes**, effacés dès
+>   l'entrée du callback **avant validation** : usage unique, car un `state` qui survit à un échec
+>   peut être rejoué. `SameSite=Lax` y est *obligatoire* et non prudent — le retour de Discord est
+>   une navigation venue d'un autre site, et `Strict` ne joindrait pas le cookie.
+> - **Le scope `identify` est figé en dur dans le code**, pas en configuration : une variable
+>   d'environnement mal réglée ne doit pas pouvoir réclamer `email` ou `guilds`.
+> - **Le BFF accepte cookie ET `Authorization: Bearer`** le temps que le front bascule. Le retrait
+>   du `Bearer` est une étape à part, à faire une fois le front migré — et à ne pas oublier, car
+>   tant qu'il est là, un oubli côté front ne se voit pas.
+>
+> Deux pièges évités à l'écriture, qui auraient exposé des secrets : `DiscordOAuthProperties` est
+> un `record`, dont le `toString()` imprime tous les composants — un `log.debug("{}", properties)`
+> aurait suffi à poser le client secret dans les journaux ; et l'appel à Discord passe par un
+> `RestTemplate` dédié et non par Feign, dont la configuration du BFF aurait envoyé le
+> `X-Internal-Secret` de Schub à Discord.
+
 Flux : `GET /auth/discord` → redirection Discord (scopes `identify` uniquement) → `GET
 /auth/discord/callback?code=…` → échange du code → `GET /users/@me` → `POST /users/by-discord`
 sur le cœur (créé au rôle `USER` si inconnu) → émission du JWT maison.
@@ -317,6 +337,32 @@ Trois, tous sous le menu *Configuration* :
    avatar et pseudo.
 
 L'écran de connexion, lui, se réduit à un bouton « Se connecter avec Discord ».
+
+### A.5 bis · Comment le front sait s'il est administrateur (tranché le 19-09)
+
+Question restée ouverte jusqu'à l'écriture, et dont la réponse évidente était une fuite.
+
+`GET /auth/me` renvoyait un `actorId` qui est l'identifiant **Discord**, alors que
+`GameServer.admins` contient des identifiants **internes**. Les deux ne se comparent pas — et la
+confusion ne lève aucune erreur : elle répond « non » à chaque fois. Résultat, les boutons
+démarrer/arrêter étaient proposés à tout compte connecté, et un `VISITEUR` recevait un 403 en
+cliquant. La décision n°11 était appliquée côté serveur mais **invisible côté client**.
+
+La réponse évidente — exposer `admins` dans la projection membre pour que le front compare — est
+exclue : c'est précisément la liste que la décision n°10 retire à cette projection, parce qu'un
+`VISITEUR` est n'importe qui sur Internet. Et c'est bien ce compte-là qui est concerné, puisqu'un
+modérateur inscrit dans les `admins` n'a pas `SERVER_INFRA_VIEW`.
+
+**La réponse retenue : `viewerIsAdmin`**, un booléen calculé pour le lecteur, porté par les deux
+projections. **Un fait sur lui, qui ne nomme personne d'autre.** Aucun appel supplémentaire,
+aucune fuite, et c'est la seule forme possible sur une projection qui ne peut pas porter la liste.
+En complément, le JWT porte désormais l'identifiant **interne** de l'appelant à côté de son
+identifiant Discord : c'est le sien, donc pas une fuite, et le sélecteur d'administrateurs du lot
+A.5 en a besoin pour se reconnaître.
+
+**À retenir au-delà de ce cas** : chaque fois qu'un écran doit savoir « ai-je le droit sur cet
+objet ? », la bonne réponse est un fait sur le lecteur, pas la liste des ayants droit. La liste
+est une information sur les autres.
 
 ### A.6 · Retrait du compte local — dernier lot, PR séparée
 
@@ -687,6 +733,40 @@ ne coûte que les parties nouvelles : quelques appels par jour et par joueur. Le
 clé de développement (20 req/s, 100 req/2 min) ne sont un sujet qu'au **premier remplissage** —
 c'est là, et seulement là, qu'il faut un étalement des appels.
 
+### D.2 quater · Schéma et ingest (tranché le 2026-09-21)
+
+**Limites mesurées** sur la clé réelle (`x-app-rate-limit: 100:120,20:1`) : clé **personnelle**,
+permanente, mais aux limites de développement — **50 appels/minute soutenus**. Une clé de
+production en donnerait 3 000. Les ids arrivent par 100 ; seuls les détails coûtent un appel
+chacun. Donc ≈ 1 appel par partie : 2 000 parties = 40 min, cinq joueurs ≈ 2 h 40.
+
+**Deux couches, pas deux options.** L'opposition « cache des appels » vs « modèle d'analyse »
+n'existe pas :
+
+| Couche | Clé | Rôle |
+|---|---|---|
+| `riot_match` | `matchId` | ce qu'on a collecté. Dédup = lecture par `_id`, jamais une recherche par contenu |
+| participation | (`puuid`, `matchId`) | dérivée, aplatie : champion, poste, victoire, côté, durée, file, patch |
+
+Les stats se calculent une fois sur la seconde. Et si le modèle d'analyse change, on **recalcule
+depuis le local** — zéro appel. Ce qui tranche la question laissée ouverte : **garder le JSON
+brut**. Le normalisé à 6 ko fait gagner du disque et coûte l'irréversibilité, alors que Riot ne
+garde pas l'historique indéfiniment.
+
+**Paquet `ingest` dans le connecteur.** File de travail **persistée en Mongo** — pas un bus en
+mémoire : un ingest de deux heures sera interrompu, et une file mémoire perd le reste sans qu'on
+sache ce qui manque. Ce n'est pas un broker et ça ne contredit pas le §5 : file interne à un
+service, pas de messagerie entre services.
+
+- **Parties récentes d'abord** ; les parties d'équipe passent devant dès que l'effectif est connu.
+- **Un seul ouvrier** : le limiteur est le goulot par construction, paralléliser ne complique que
+  la comptabilité du quota.
+- Empilement idempotent, et on n'empile pas une partie déjà stockée.
+- `POST /players/{puuid}/matches/sync` devient « j'empile » au lieu de « je récupère ».
+- Compteur pour l'OWNER : en attente, en cours, en échec, et surtout le **temps d'écoulement
+  estimé** — « 4 300 en attente » ne dit rien, « prêt dans 1 h 25 » si.
+
+**À vérifier d'un appel** : jusqu'où `match-v5` remonte réellement.
 ### D.3 · Lots, dans l'ordre
 
 | Lot | Contenu | Livre quoi |
@@ -908,6 +988,7 @@ fenêtre, et ne jamais supposer que l'état trouvé est celui qu'on a laissé.
 | 2 | `ROLE_MANAGE` | **réservé à `OWNER`**, non attribuable | A.1 |
 | 3 | Fraîcheur du jeton | **15 min + réémission glissante**, pas de refresh token | A.2 |
 | 4 | Transport du jeton | **cookie `httpOnly`** (arbitré par moi) | A.3 |
+| 20 | Comment le front sait s'il est admin d'un serveur | **`viewerIsAdmin`**, booléen calculé pour le lecteur — pas la liste des admins | A.1 |
 | 5 | Thème | **sombre par défaut**, clair conservé en alternatif | B.1 |
 | 6 | Formulaire de contact | **MP Discord du bot**, avec repli salon + anti-spam | C |
 | 7 | Domaine LoL | **dans le cœur**, paquet isolé ; ingestion au connecteur | D.2 |

@@ -687,6 +687,41 @@ ne coûte que les parties nouvelles : quelques appels par jour et par joueur. Le
 clé de développement (20 req/s, 100 req/2 min) ne sont un sujet qu'au **premier remplissage** —
 c'est là, et seulement là, qu'il faut un étalement des appels.
 
+### D.2 quater · Schéma et ingest (tranché le 2026-09-21)
+
+**Limites mesurées** sur la clé réelle (`x-app-rate-limit: 100:120,20:1`) : clé **personnelle**,
+permanente, mais aux limites de développement — **50 appels/minute soutenus**. Une clé de
+production en donnerait 3 000. Les ids arrivent par 100 ; seuls les détails coûtent un appel
+chacun. Donc ≈ 1 appel par partie : 2 000 parties = 40 min, cinq joueurs ≈ 2 h 40.
+
+**Deux couches, pas deux options.** L'opposition « cache des appels » vs « modèle d'analyse »
+n'existe pas :
+
+| Couche | Clé | Rôle |
+|---|---|---|
+| `riot_match` | `matchId` | ce qu'on a collecté. Dédup = lecture par `_id`, jamais une recherche par contenu |
+| participation | (`puuid`, `matchId`) | dérivée, aplatie : champion, poste, victoire, côté, durée, file, patch |
+
+Les stats se calculent une fois sur la seconde. Et si le modèle d'analyse change, on **recalcule
+depuis le local** — zéro appel. Ce qui tranche la question laissée ouverte : **garder le JSON
+brut**. Le normalisé à 6 ko fait gagner du disque et coûte l'irréversibilité, alors que Riot ne
+garde pas l'historique indéfiniment.
+
+**Paquet `ingest` dans le connecteur.** File de travail **persistée en Mongo** — pas un bus en
+mémoire : un ingest de deux heures sera interrompu, et une file mémoire perd le reste sans qu'on
+sache ce qui manque. Ce n'est pas un broker et ça ne contredit pas le §5 : file interne à un
+service, pas de messagerie entre services.
+
+- **Parties récentes d'abord** ; les parties d'équipe passent devant dès que l'effectif est connu.
+- **Un seul ouvrier** : le limiteur est le goulot par construction, paralléliser ne complique que
+  la comptabilité du quota.
+- Empilement idempotent, et on n'empile pas une partie déjà stockée.
+- `POST /players/{puuid}/matches/sync` devient « j'empile » au lieu de « je récupère ».
+- Compteur pour l'OWNER : en attente, en cours, en échec, et surtout le **temps d'écoulement
+  estimé** — « 4 300 en attente » ne dit rien, « prêt dans 1 h 25 » si.
+
+**À vérifier d'un appel** : jusqu'où `match-v5` remonte réellement.
+
 ### D.3 · Lots, dans l'ordre
 
 | Lot | Contenu | Livre quoi |

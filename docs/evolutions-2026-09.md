@@ -1078,3 +1078,67 @@ Kléber (2015-2016).
    listes de diffusion. Les liens Discord, LinkedIn et GitHub du pied de page suffisent au reste.
 3. **Les URL de tes profils Discord, LinkedIn et GitHub** pour le pied de page — LinkedIn je
    l'ai, les deux autres non.
+
+---
+
+## 10. Retours d'usage — 21 et 22 septembre
+
+Deux listes, données après avoir réellement utilisé l'application. Elles corrigent des décisions
+antérieures : **c'est l'usage qui tranche, pas le plan**.
+
+### Décisions qui renversent le plan
+
+**L'administrateur par serveur est retiré.** Le §A.1 donnait à `GameServer.admins` une autorité
+par ressource : figurer dans la liste donnait démarrer/arrêter sur *ce* serveur. Constat à
+l'usage : un `MODERATOR` portait ces permissions et **aucun écran ne les lui rendait
+atteignables** — le menu Configuration exige `SERVER_CREATE|SERVER_EDIT|SERVER_INFRA_VIEW`, et la
+page des serveurs n'offrait pas les actions. Il pouvait démarrer par l'API, jamais par l'interface.
+
+Arbitrage : *« un admin m'aide sur le serveur physique donc a plein de droits, le modo s'occupe de
+faire vivre un serveur de jeu »*. Le champ `admins`, son sélecteur, `viewerIsAdmin` et la branche
+`GAME_SERVER` de l'autorité par ressource disparaissent. Un modérateur pilote **tous** les serveurs
+de jeu, par son rôle, depuis `/servers`.
+
+⚠️ Cela annule la demande initiale « le champ admin me permet de sélectionner qui pourra les
+gérer ». C'est assumé après usage. **`ResourceRef` et `ScopedAuthorityProvider` restent** : ils
+portent l'autorité sur les équipes.
+
+**La session passe de 15 minutes à 30 jours.** La décision n°3 faisait porter à une seule durée
+deux rôles : la session *et* la fraîcheur des droits. Le renouvellement se déclenchant à mi-vie et
+seulement sur une requête HTTP, lire une page huit minutes suffisait à être déconnecté.
+
+Les deux réglages sont séparés. La réémission relisant déjà les permissions dans le cœur,
+l'expiration n'a jamais eu besoin d'être courte : **30 jours d'inactivité, renouvellement dès que
+le jeton a plus d'une heure**, règle portant sur l'âge et non sur le reste à vivre. Un droit retiré
+prend effet en une heure d'usage. Assumé : un cookie volé vaut 30 jours ; une révocation immédiate
+demanderait un état côté BFF.
+
+**L'accueil n'est plus le portfolio.** `/` devient la page produit de Schub plus une liste
+d'onboarding ; tout le contenu personnel part sur `/contact`, où le formulaire descend en pied de
+page sous « Feedback ».
+
+**Le pool de champions est inversé.** Il répondait « voici ce que chaque membre maîtrise » ; il doit
+répondre **« voici ce qu'on peut aligner à ce poste »** : catalogue complet en icônes, choix
+persistant de candidats par poste, maîtrises des membres qui jouent ce poste, et un plancher de
+maîtrise. Un membre porte désormais **plusieurs postes**.
+
+### Les modes de jeu
+
+Les statistiques groupaient par `queueId` brut — « File 480 », « File 1700 » ne veulent rien dire.
+Source retenue : `https://static.developer.riotgames.com/docs/lol/queues.json`, la liste officielle.
+480 = **Swiftplay**, 1700/1710 = **Arène**. Le regroupement se fait par **mode**, pas par
+identifiant : plusieurs identifiants désignent le même mode. Le nom est dérivé **à la lecture**
+depuis l'identifiant stocké, donc compléter l'énumération corrige aussi les parties déjà en base.
+
+### Ce qui reste ouvert, et à qui
+
+| Sujet | Qui |
+|---|---|
+| Réserve de quota : pendant une collecte, **tout appel interactif répond 429** (mesuré : 0/20 en une minute). Céder ne suffit pas, il faut garder des créneaux. | moi |
+| `auto-index-creation` à `false` dans le cœur : le même piège a frappé trois fois (`V001`, `V007`, `V009`). À activer une fois pour toutes plutôt qu'un index par migration. | moi |
+| `og:image` : la source vectorielle existe, la conversion en PNG 1200×630 non. | moi |
+| Page produit `/lol`, CGU, politique de confidentialité — prérequis de la demande de **clé de production Riot**, dont le délai est subi (cas constatés à 7 mois). | moi |
+| Lot **A.6** : retrait du compte mot de passe. Attend une connexion Discord vérifiée **en prod**, donc une release — la prod tourne encore en `v2.0.1`. | release |
+| Paragraphe sur le poste chez Liebherr — bloque la publication de `/contact`, une alerte le signale. | lui |
+| URL Discord et GitHub du pied de page. | lui |
+| Inspection de code, avec ses listes de retours. | lui |

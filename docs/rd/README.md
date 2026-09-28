@@ -88,3 +88,28 @@ Règle candidate « pas d'anti-heal avant 20 min », à écart d'or égal : −3
 
 Reprise possible, mais pas prioritaire vu la taille de l'effet : mesurer l'exposition avant la partie, par les
 champions à soins de la composition adverse, plutôt que par les soins réalisés.
+
+## Schub#41 — Seuils des habitudes de timeline (28/09/2026)
+
+Moyennes par partie des signaux de timeline (`GET /stats/players/{puuid}/timeline-habits` du connecteur, même code
+que le moteur), pour 320 joueurs tirés de l'échantillon par palier (40 par groupe). 106 ont des parties avec
+timeline, 76 en ont au moins 5 (médiane 8).
+
+| Moyenne par partie | 10e | 25e | 50e | 75e | 90e centile |
+|---|---|---|---|---|---|
+| Morts isolées | 0,08 | 0,17 | 0,36 | 0,60 | 0,90 |
+| Premier mort d'un combat | 0,27 | 0,43 | 0,62 | 0,73 | 1,10 |
+| Part des morts en chaîne (équipe) | 0,39 | 0,42 | 0,45 | 0,47 | 0,50 |
+| Présence groupée aux dragons et barons | 0,15 | 0,20 | 0,24 | 0,29 | 0,34 |
+| Objectifs cédés sans contrepartie (équipe) | 0,63 | 0,79 | 1,07 | 1,50 | 1,65 |
+
+**Règles retenues (V020, portée HABIT, au moins 5 parties analysées)** : morts isolées (0,6 → 0,9), premier mort
+des combats (0,75 → 1,1), dispersé aux objectifs (0,2 → 0,15). Rampes du 75e au 90e centile, ou du 25e au 10e.
+
+**Écartées** : les morts en chaîne (80 % des joueurs entre 0,39 et 0,50, et c'est un signal d'équipe) et les objectifs
+cédés (équipe). Les morts en gank, les duels perdus et les combats en infériorité exigent une timeline complète
+(parties d'équipe) : aucun joueur de l'échantillon n'en a, donc pas de base pour un seuil.
+
+Les morts isolées montent avec le palier (médiane 0,17 de Fer à Argent, 0,37 de Diamant au sommet) : les
+joueurs forts jouent plus seuls, notamment en poussant une voie. Les seuils sont communs à tous les paliers faute
+de volume par palier (17 joueurs de Fer à Argent). Une grille par palier viendra avec plus de digests.

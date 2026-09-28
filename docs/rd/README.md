@@ -62,3 +62,29 @@ les joueurs relevés. À reprendre quand le moteur tournera sur l'échantillon p
 **Sous-tickets de code pour #18** : catalogue des items par patch dans le connecteur ; capteurs de build et
 règles « armure contre critique » et « résistance magique » dans le moteur (catégorie BUILD, affichées dans le
 détail d'une partie) ; anti-heal réécrit avec le moment d'achat ; usage 2 plus tard.
+
+## Schub#39 — Anti-heal : le moment de l'achat (`39_antiheal_moment.py`, 28/09/2026)
+
+Sur les 42 805 digests : 31 507 parties de la Faille de 25 min et plus (une partie plus courte n'a pas eu besoin
+d'anti-heal). Équipes exposées : soins adverses dans le quart supérieur (57 809 et plus), soit 15 755 équipes.
+Premier achat par un membre d'un des 12 items à blessures graves de Data Dragon 16.19.1, composants compris.
+Comparaison à écart d'or égal à 15 min, pour ne pas mesurer l'avance de l'équipe qui achète plus tôt.
+
+| Écart d'or à 15 min | Avant 15 min | 15 à 20 min | Après 20 min | Jamais |
+|---|---|---|---|---|
+| En retard (< −1 500) | 19,3 % (507) | 25,3 % (570) | 28,4 % (1 847) | 23,4 % (2 586) |
+| À égalité (± 1 500) | 36,6 % (593) | 37,3 % (638) | 37,6 % (2 348) | 34,8 % (2 862) |
+| En avance (> +1 500) | 50,4 % (369) | 45,4 % (390) | 46,1 % (1 367) | 47,0 % (1 678) |
+
+Règle candidate « pas d'anti-heal avant 20 min », à écart d'or égal : −3,0 points en retard, +0,9 à égalité,
++1,2 en avance. Ni régulier, ni significatif.
+
+**Verdict : abandonner**, le moment comme la présence.
+- Le moment de l'achat ne sépare pas les équipes qui gagnent de celles qui perdent. En retard, l'achat précoce fait même
+  moins bien, parce qu'il coûte l'or d'un objet de dégâts.
+- La présence seule, peu importe quand, vaut au mieux 2 à 3 points, et rien en avance. C'est l'écart déjà vu en #19.
+- La mesure de l'exposition est biaisée : les soins adverses sont comptés sur toute la partie, et une équipe qui gagne
+  soigne plus (les équipes exposées ne gagnent que 35 % de leurs parties).
+
+Reprise possible, mais pas prioritaire vu la taille de l'effet : mesurer l'exposition avant la partie, par les
+champions à soins de la composition adverse, plutôt que par les soins réalisés.

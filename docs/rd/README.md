@@ -113,3 +113,29 @@ cédés (équipe). Les morts en gank, les duels perdus et les combats en inféri
 Les morts isolées montent avec le palier (médiane 0,17 de Fer à Argent, 0,37 de Diamant au sommet) : les
 joueurs forts jouent plus seuls, notamment en poussant une voie. Les seuils sont communs à tous les paliers faute
 de volume par palier (17 joueurs de Fer à Argent). Une grille par palier viendra avec plus de digests.
+
+## Schub#64 — Pousser une voie déjà ouverte (30/09/2026)
+
+Capteur `pushVoieOuverte` (`64_push_voie_ouverte.js`, mongosh sur les digests du dev) : après la chute du premier
+inhibiteur adverse, part des minutes où le joueur est dans la moitié adverse d'un couloir **ouvert** (ses trois tours
+et son inhibiteur tombés, inhibiteur pas encore réapparu), sans allié à moins de 2 000 unités, alors qu'un autre
+couloir garde au moins une tour. Les minutes à moins de 90 s d'un dragon, d'un Héraut ou d'un Nashor sont exclues.
+300 parties classées solo par palier (lobby), 7 400 joueurs dont l'équipe a pris un inhibiteur.
+
+| Palier | Capteur non nul | Moyenne | Moyenne en victoire | Moyenne en défaite |
+|---|---|---|---|---|
+| Fer | 6,6 % | 1,0 % | 1,1 % | 0,8 % |
+| Argent | 5,6 % | 1,1 % | 1,2 % | 0,5 % |
+| Or | 5,8 % | 1,1 % | 1,2 % | 0,5 % |
+| Émeraude | 4,6 % | 0,9 % | 1,0 % | 0,4 % |
+| Diamant | 6,8 % | 1,4 % | 1,5 % | 1,0 % |
+| Maître | 6,6 % | 1,6 % | 1,7 % | 0,6 % |
+| Challenger | 5,3 % | 1,1 % | 1,1 % | 1,3 % |
+
+Variante plus large (couloir ouvert dès ses trois tours tombées) : même allure, 6 à 10 % de capteurs non nuls,
+moyenne de 1,1 à 1,8 % sans pente, toujours plus haute en victoire.
+
+**Verdict : abandonner.** Le capteur ne baisse pas quand le palier monte, et il est plus fort dans les parties
+gagnées : il mesure une équipe qui finit la partie, pas un défaut de macro. Son 70e centile vaut zéro dans chaque
+palier, donc aucun seuil de faiblesse n'est possible. Une position par minute ne distingue pas un split-push voulu
+d'une errance ; il faudrait l'intention (appel, ping), que la timeline ne donne pas.

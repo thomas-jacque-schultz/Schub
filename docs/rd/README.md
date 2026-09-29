@@ -120,7 +120,7 @@ Capteur `pushVoieOuverte` (`64_push_voie_ouverte.js`, mongosh sur les digests du
 inhibiteur adverse, part des minutes où le joueur est dans la moitié adverse d'un couloir **ouvert** (ses trois tours
 et son inhibiteur tombés, inhibiteur pas encore réapparu), sans allié à moins de 2 000 unités, alors qu'un autre
 couloir garde au moins une tour. Les minutes à moins de 90 s d'un dragon, d'un Héraut ou d'un Nashor sont exclues.
-300 parties classées solo par palier (lobby), 7 400 joueurs dont l'équipe a pris un inhibiteur.
+300 parties classées solo par palier (lobby), 8 400 joueurs dont l'équipe a pris un inhibiteur.
 
 | Palier | Capteur non nul | Moyenne | Moyenne en victoire | Moyenne en défaite |
 |---|---|---|---|---|
@@ -133,9 +133,9 @@ couloir garde au moins une tour. Les minutes à moins de 90 s d'un dragon, d'un 
 | Challenger | 5,3 % | 1,1 % | 1,1 % | 1,3 % |
 
 Variante plus large (couloir ouvert dès ses trois tours tombées) : même allure, 6 à 10 % de capteurs non nuls,
-moyenne de 1,1 à 1,8 % sans pente, toujours plus haute en victoire.
+moyenne de 1,1 à 1,8 % sans pente, plus haute en victoire partout sauf en Challenger.
 
 **Verdict : abandonner.** Le capteur ne baisse pas quand le palier monte, et il est plus fort dans les parties
-gagnées : il mesure une équipe qui finit la partie, pas un défaut de macro. Son 70e centile vaut zéro dans chaque
+gagnées (sauf en Challenger) : il mesure une équipe qui finit la partie, pas un défaut de macro. Son 70e centile vaut zéro dans chaque
 palier, donc aucun seuil de faiblesse n'est possible. Une position par minute ne distingue pas un split-push voulu
 d'une errance ; il faudrait l'intention (appel, ping), que la timeline ne donne pas.

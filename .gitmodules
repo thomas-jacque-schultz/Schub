@@ -26,3 +26,7 @@
 	path = schub-connector-riot
 	url = git@github.com:thomas-jacque-schultz/schub-connector-riot.git
 	branch = main
+[submodule "schub-connector-discord-premadelab"]
+	path = schub-connector-discord-premadelab
+	url = git@github.com:thomas-jacque-schultz/schub-connector-discord-premadelab.git
+	branch = main

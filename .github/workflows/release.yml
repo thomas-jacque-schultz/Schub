@@ -31,7 +31,7 @@ env:
   VERSION: ${{ inputs.version }}
   ALLOW_MAIN_REWRITE: ${{ inputs.allow_main_rewrite }}
   GH_TOKEN: ${{ secrets.RELEASE_PAT }}
-  SUBREPOS: schub-back-bff schub-connector-discord schub-front-servers schub-connector-freebox schub-connector-portainer schub-connector-riot schub-core
+  SUBREPOS: schub-back-bff schub-connector-discord schub-front-servers schub-connector-freebox schub-connector-portainer schub-connector-riot schub-core schub-connector-discord-premadelab
 
 jobs:
   release:
@@ -145,7 +145,7 @@ jobs:
           # « nothing to commit » est un cas NORMAL, pas une panne : les gitlinks peuvent déjà
           # pointer sur les commits qu'on release, par exemple s'ils ont été réalignés à la main
           # après la fusion des PR. C'est ce qui a fait échouer la release du 17-09, alors que
-          # les sept sous-repos étaient déjà tagués et leurs images publiées.
+          # les huit sous-repos étaient déjà tagués et leurs images publiées.
           if git diff --cached --quiet; then
             echo "Les gitlinks pointent déjà sur les commits releasés, rien à committer."
           else

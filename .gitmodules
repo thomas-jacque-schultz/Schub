@@ -30,3 +30,11 @@
 	path = schub-connector-discord-premadelab
 	url = git@github.com:thomas-jacque-schultz/schub-connector-discord-premadelab.git
 	branch = main
+[submodule "schub-together-games"]
+	path = schub-together-games
+	url = git@github.com:thomas-jacque-schultz/schub-together-games.git
+	branch = main
+[submodule "schub-canvas-games"]
+	path = schub-canvas-games
+	url = git@github.com:thomas-jacque-schultz/schub-canvas-games.git
+	branch = main

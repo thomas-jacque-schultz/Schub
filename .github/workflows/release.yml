@@ -29,7 +29,7 @@ env:
   VERSION: ${{ inputs.version }}
   ALLOW_MAIN_REWRITE: ${{ inputs.allow_main_rewrite }}
   GH_TOKEN: ${{ secrets.RELEASE_PAT }}
-  SUBREPOS: schub-back-bff schub-connector-discord schub-front-servers schub-connector-freebox schub-connector-portainer schub-connector-riot schub-core schub-connector-discord-premadelab schub-together-games schub-canvas-games
+  SUBREPOS: schub-back-bff schub-connector-discord schub-front-servers schub-connector-freebox schub-connector-portainer schub-connector-riot schub-core schub-connector-discord-premadelab schub-together-games
 
 jobs:
   release:

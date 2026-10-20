@@ -34,7 +34,3 @@
 	path = schub-together-games
 	url = git@github.com:thomas-jacque-schultz/schub-together-games.git
 	branch = main
-[submodule "schub-canvas-games"]
-	path = schub-canvas-games
-	url = git@github.com:thomas-jacque-schultz/schub-canvas-games.git
-	branch = main
